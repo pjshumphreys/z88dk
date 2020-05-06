@@ -1,0 +1,7 @@
+ LINE 2, "t/labels_dotdirective.asm"
+ .directive1
+label2:
+.directive3:
+label4:ret z
+ .directive5 ret z
+ .directive6 ret z

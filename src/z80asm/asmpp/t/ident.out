@@ -1,0 +1,10 @@
+ LINE 2, "t/ident.asm"
+ ex af,af'
+ ex bc,bc'
+ ex de,de'
+ ex hl,hl'
+ LINE 7
+ defb 1
+defb:1
+ LINE 10
+Abc123.zxy_pt:ret

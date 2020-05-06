@@ -1,0 +1,3 @@
+ LINE 2, "t/ident_dotdirective.asm"
+ defb 1
+ .defb 1

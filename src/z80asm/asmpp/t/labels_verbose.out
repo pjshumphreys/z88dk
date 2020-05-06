@@ -1,0 +1,18 @@
+; .label1
+ LINE 2, "t/labels_verbose.asm"
+label1:
+; label2:
+ LINE 3
+label2:
+; .label3:
+ LINE 4
+label3:
+; label4:ret z;comment
+ LINE 5
+label4:ret z
+; .label5 ret z;comment
+ LINE 6
+label5:ret z
+; .label6		ret z			; comment
+ LINE 7
+label6:ret z

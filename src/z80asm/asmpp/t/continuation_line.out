@@ -1,0 +1,6 @@
+ LINE 2, "t/continuation_line.asm"
+lbl1:ld b,23
+ LINE 2
+ djnz lbl1
+ LINE 2
+lbl2:ret

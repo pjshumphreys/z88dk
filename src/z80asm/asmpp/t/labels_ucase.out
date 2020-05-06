@@ -1,0 +1,7 @@
+ LINE 2, "t/labels_ucase.asm"
+LABEL1:
+LABEL2:
+LABEL3:
+LABEL4:RET Z
+LABEL5:RET Z
+LABEL6:RET Z

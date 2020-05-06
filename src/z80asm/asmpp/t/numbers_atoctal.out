@@ -1,0 +1,3 @@
+ LINE 2, "t/numbers_atoctal.asm"
+ defb 0,1,2,3,7,8,16,24
+ defb 0,1,2,3,7,8,16,24

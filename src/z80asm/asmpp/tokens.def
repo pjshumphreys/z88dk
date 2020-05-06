@@ -1,0 +1,51 @@
+// ASM pre-processor - read asm files and send output to stdout
+// Copyright (c) Paulo Custodio, 2020
+// License: http://www.perlfoundation.org/artistic_license_2_0
+
+#ifndef TOKEN
+#define TOKEN(id, string, ok_at_bol)
+#endif
+
+TOKEN(tkEND_LINE,		"",		true)
+TOKEN(tkSTART_LINE,		"",		true)
+TOKEN(tkLABEL,			"",		true)
+TOKEN(tkIDENT,			"",		false)
+TOKEN(tkNUMBER,			"",		false)
+TOKEN(tkSTRING,			"",		false)
+
+TOKEN(tkNOT,			"!",	false)
+TOKEN(tkINVERT,			"~",	false)
+TOKEN(tkEQ,				"=",	false)
+TOKEN(tkNOT_EQ,			"!=",	false)
+TOKEN(tkLESS_EQ,		"<=",	false)
+TOKEN(tkLESS,			"<",	false)
+TOKEN(tkGREATER_EQ,		">=",	false)
+TOKEN(tkGREATER,		">",	false)
+TOKEN(tkSHIFT_LEFT,		"<<",	false)
+TOKEN(tkSHIFT_RIGHT,	">>",	false)
+TOKEN(tkLOG_AND,		"&&",	false)
+TOKEN(tkBIN_AND,		"&",	false)
+TOKEN(tkLOG_OR,			"||",	false)
+TOKEN(tkBIN_OR,			"|",	false)
+TOKEN(tkLOG_XOR,		"^^",	false)
+TOKEN(tkBIN_XOR,		"^",	false)
+TOKEN(tkMULT,			"*",	false)
+TOKEN(tkPOWER,			"**",	false)
+TOKEN(tkMOD,			"%",	false)
+TOKEN(tkASMPC,			"ASMPC",false)
+TOKEN(tkHASH,			"#",	false)
+TOKEN(tkLEFT_PAREN,		"(",	false)
+TOKEN(tkRIGHT_PAREN,	")",	false)
+TOKEN(tkLEFT_SQUARE,	"[",	false)
+TOKEN(tkRIGHT_SQUARE,	"]",	false)
+TOKEN(tkLEFT_BRACKET,	"{",	false)
+TOKEN(tkRIGHT_BRACKET,	"}",	false)
+TOKEN(tkPLUS,			"+",	false)
+TOKEN(tkCOMMA,			",",	false)
+TOKEN(tkMINUS,			"-",	false)
+TOKEN(tkDOT,			".",	false)
+TOKEN(tkDIV,			"/",	false)
+TOKEN(tkCOLON,			":",	false)
+TOKEN(tkQUESTION,		"?",	false)
+
+#undef TOKEN

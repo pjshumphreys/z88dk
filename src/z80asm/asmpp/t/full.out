@@ -1,0 +1,14 @@
+ LINE 7, "t/full.asm"
+label1:
+label2:
+label3:
+ LINE 12
+ ret
+ ret
+ LINE 16
+ ret z
+ ret z
+ LINE 20
+label4:ret z
+label5:ret z
+label6:ret z

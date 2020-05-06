@@ -1,0 +1,7 @@
+ LINE 2, "t/labels.asm"
+label1:
+label2:
+label3:
+label4:ret z
+label5:ret z
+label6:ret z
