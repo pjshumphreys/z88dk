@@ -34,6 +34,7 @@ int c_line_labels = 0;
 int c_cline_directive = 0;
 int c_cpu = CPU_Z80;
 int c_old_diagnostic_fmt = 0;
+int c_offset = 2;
 
 /* Settings for genmath + math48 */
 int c_fp_mantissa_bytes = 5;
