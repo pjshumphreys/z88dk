@@ -44,6 +44,11 @@ ENDIF
    
    ld l,c
    ld h,b
-   ret nc
+   jp c, __esxdos_error_zc
+   ld a,c
+   or b
+   ret nz
+   scf
+   ret
    
    jp __esxdos_error_zc
