@@ -38,11 +38,11 @@
 	push	de
 	push	hl
 	call	_func
-	pop	bc
-	pop	bc
-	ld	hl,0	;const
+	ld	hl,4	;const
 	add	hl,sp
 	call	l_glong
+	pop	bc
+	pop	bc
 	pop	bc
 	pop	bc
 	ret
@@ -86,6 +86,7 @@
 	push	hl
 	ld	hl,0	;const
 	ld	de,16256
+	call	l_f32_sint2f
 	ex	de,hl
 	ex	(sp),hl
 	push	de
@@ -235,6 +236,7 @@
 	add	hl,sp
 	call	l_glong
 	call	l_f32_invf
+	call	l_f32_sint2f
 	ret
 
 
