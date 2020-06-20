@@ -764,6 +764,7 @@ msx_clib.lib:
 	$(MAKE) msxdeps
 	$(call buildgeneric,msx)
 	$(MAKE) -C target/cpm/fcntl
+	$(MAKE) -C target/msx/fcntl/msxdos2
 	$(MAKE) -C games TARGET=msx
 	$(MAKE) -C target/msx 
 	$(MAKE) -C video/tms9918 TARGET=msx
