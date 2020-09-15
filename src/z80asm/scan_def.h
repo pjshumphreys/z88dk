@@ -208,6 +208,7 @@ TOKEN_RE(TK_IND_HLD, "(HLD", "(" hspace "HLD"i index_reg_suffix, p--; te--)
 /* assembly directives */
 TOKEN_OPCODE(ALIGN      )
 TOKEN_OPCODE(BINARY     )
+TOKEN_OPCODE1(BINARY, "incbin")
 TOKEN_OPCODE(BYTE       )
 TOKEN_OPCODE(C_LINE     )
 TOKEN_OPCODE(DB         )

@@ -256,6 +256,7 @@ tokens:
   # Assembly directives
   - name    : ALIGN
   - name    : BINARY
+  - name    : INCBIN
   - name    : BYTE
   - name    : C_LINE
   - name    : DB
