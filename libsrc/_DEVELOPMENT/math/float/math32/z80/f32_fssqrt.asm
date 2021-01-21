@@ -43,45 +43,56 @@ PUBLIC _m32_sqrtf, _m32_invsqrtf
 
 
 .m32_fssqrt
-    pop af                      ; ret
+    pop bc                      ; ret
     pop hl                      ; y off stack
     pop de
     push de
     push hl
-    push af                     ; ret
+    push bc                     ; ret
+    sla e
     rl d
-    jp C,m32_fsconst_nnan       ; negative number?
+    jr Z,m32_sqrt_zero          ; sqrt 0
+    jp C,m32_fsconst_nnan       ; negative number
     rr d
+    rr e
     call m32_fsinvsqrt_fastcall
     jp m32_fsmul
 
 
 ._m32_sqrtf
 .m32_fssqrt_fastcall
+    sla e
     rl d
-    jp C,m32_fsconst_nnan       ; negative number?
+    jr Z,m32_sqrt_zero          ; sqrt 0
+    jp C,m32_fsconst_nnan       ; negative number
     rr d
-    pop af                      ; ret
+    rr e
+    pop bc                      ; ret
     push de                     ; y msw on stack
     push hl                     ; y lsw on stack
-    push af                     ; ret
+    push bc                     ; ret
     call m32_fsinvsqrt_fastcall
     jp m32_fsmul_callee
 
 
-._m32_invsqrtf
-    rl d
-    jp C,m32_fsconst_nnan       ; negative number?
-    rr d
+.m32_sqrt_zero
+    ld e,d                      ; use 0
+    ld h,d
+    ld l,d
+    rr d                        ; recover sign
+    ret
 
-.m32_fsinvsqrt_fastcall         ; DEHL
+
+._m32_invsqrtf
     sla e
     rl d
-    jp Z,m32_fsconst_pzero      ; zero exponent? zero result
+    jr Z,m32_sqrt_zero          ; sqrt 0
+    jp C,m32_fsconst_nnan       ; negative number
     rr d
     rr e
 
-    ld b,d                      ; retain original y sign & exponent
+.m32_fsinvsqrt_fastcall         ; DEHL
+    ld b,d
     set 7,d                     ; make y negative
 
     push de                     ; -y msw on stack for w[3] - remove for 2 iterations
@@ -91,11 +102,11 @@ PUBLIC _m32_sqrtf, _m32_invsqrtf
     push de                     ; -y msw on stack for w[1]
     push hl                     ; -y lsw on stack for w[1]
 
-    ex de,hl                    ; original y in hlde
-    ld c,l                      ; original y in bcde
+    ld c,e
+    ex de,hl                    ; original y in bcde
                                 ; now calculate w[0]
-    srl b                       
-    rr c                        ; y>>1
+    srl b                       ; y>>1
+    rr c
     rr d
     rr e
 
@@ -106,14 +117,14 @@ PUBLIC _m32_sqrtf, _m32_invsqrtf
     ld hl,05f37h
     sbc hl,bc                   ; (float) w[0] in hlde
 
-    add hl,hl                   ; get w[0] full exponent into h  
+    add hl,hl                   ; get w[0] full exponent into h
     rr c                        ; put sign in c
 
     scf
     rr l                        ; put implicit bit for mantissa in lde
     ld b,h                      ; unpack IEEE to expanded float 32-bit mantissa h lde0 -> b dehl
     ld d,l
-    ld h,e   
+    ld h,e
     ld e,d
     ld l,0
 
@@ -217,18 +228,9 @@ PUBLIC _m32_sqrtf, _m32_invsqrtf
     ld h,e
     ld e,d
 
-    or a                        ; round using feilipu method
+    and 0c0h                    ; round using feilipu method
     jr Z,fd0
-    inc l
-    jr NZ,fd0
-    inc h
-    jr NZ,fd0
-    inc e
-    jr NZ,fd0
-    rr e
-    rr h
-    rr l
-    inc b
+    set 0,l
 
 .fd0
     sla e

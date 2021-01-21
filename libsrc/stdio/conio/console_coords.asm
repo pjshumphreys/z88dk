@@ -19,3 +19,4 @@ __console_y:	defb	0
 
 __console_w:	defb	CONSOLE_COLUMNS
 __console_h:	defb	CONSOLE_ROWS
+

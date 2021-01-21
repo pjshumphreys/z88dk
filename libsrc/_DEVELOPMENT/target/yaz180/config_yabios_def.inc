@@ -1,6 +1,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; yabios v1.5 provided labels found in common area 1 ;;;;;;;
+;;;; yabios v2.0 provided labels found in common area 1 ;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 PUBLIC z180_int_int1
@@ -147,6 +147,9 @@ DEFC asm_asci0_init                  = $FABD
 PUBLIC asm_asci0_flush_Rx_di
 DEFC asm_asci0_flush_Rx_di           = $FAD7
 
+PUBLIC _asci0_flush_Rx
+DEFC _asci0_flush_Rx                 = $FAD7
+
 PUBLIC asm_asci0_flush_Rx
 DEFC asm_asci0_flush_Rx              = $FAE1
 
@@ -162,11 +165,17 @@ DEFC asm_asci0_reset                 = $FB07
 PUBLIC asm_asci0_getc
 DEFC asm_asci0_getc                  = $FB11
 
+PUBLIC _asci0_getc
+DEFC _asci0_getc                     = $FB11
+
 PUBLIC asm_asci0_peekc
 DEFC asm_asci0_peekc                 = $FB27
 
 PUBLIC asm_asci0_pollc
 DEFC asm_asci0_pollc                 = $FB33
+
+PUBLIC _asci0_pollc
+DEFC _asci0_pollc                    = $FB33
 
 PUBLIC asm_asci0_putc
 DEFC asm_asci0_putc                  = $FB3B
@@ -176,6 +185,9 @@ DEFC asm_asci1_init                  = $FBDA
 
 PUBLIC asm_asci1_flush_Rx_di
 DEFC asm_asci1_flush_Rx_di           = $FBF4
+
+PUBLIC _asci1_flush_Rx
+DEFC _asci1_flush_Rx                 = $FBF4
 
 PUBLIC asm_asci1_flush_Rx
 DEFC asm_asci1_flush_Rx              = $FBFE
@@ -192,32 +204,20 @@ DEFC asm_asci1_reset                 = $FC24
 PUBLIC asm_asci1_getc
 DEFC asm_asci1_getc                  = $FC2E
 
+PUBLIC _asci1_getc
+DEFC _asci1_getc                     = $FC2E
+
 PUBLIC asm_asci1_peekc
 DEFC asm_asci1_peekc                 = $FC44
 
 PUBLIC asm_asci1_pollc
 DEFC asm_asci1_pollc                 = $FC50
 
-PUBLIC asm_asci1_putc
-DEFC asm_asci1_putc                  = $FC58
-
-PUBLIC _asci0_flush_Rx
-DEFC _asci0_flush_Rx                 = $FAD7
-
-PUBLIC _asci0_getc
-DEFC _asci0_getc                     = $FB11
-
-PUBLIC _asci0_pollc
-DEFC _asci0_pollc                    = $FB33
-
-PUBLIC _asci1_flush_Rx
-DEFC _asci1_flush_Rx                 = $FBF4
-
-PUBLIC _asci1_getc
-DEFC _asci1_getc                     = $FC2E
-
 PUBLIC _asci1_pollc
 DEFC _asci1_pollc                    = $FC50
+
+PUBLIC asm_asci1_putc
+DEFC asm_asci1_putc                  = $FC58
 
 PUBLIC ide_read_sector
 DEFC ide_read_sector                 = $FD92

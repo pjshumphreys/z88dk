@@ -20,7 +20,7 @@ target/msx/psg/psg_init
 target/msx/psg/get_psg
 target/msx/psg/set_psg
 target/msx/psg/set_psg_callee
-@psg/psg.lst
+@psg/ay/psg.lst
 @video/mc6845/mc6845.lst
 target/svi/rs232/rs232_close
 target/svi/rs232/rs232_get
@@ -28,4 +28,4 @@ target/svi/rs232/rs232_init
 target/svi/rs232/rs232_params
 target/svi/rs232/rs232_put
 @target/svi/arch_svi.lst
-@z80.lst
+

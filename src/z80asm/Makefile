@@ -95,6 +95,9 @@ z80asm_lib:
 ifeq ($(CROSS),0)
 	$(MAKE) -C dev/z80asm_lib
 	cp dev/z80asm_lib/$(PROJ)-*.lib .
+ifdef ZCCCFG
+	cp dev/z80asm_lib/$(PROJ)-*.lib $(ZCCCFG)/../
+endif
 endif
 
 clean::
@@ -119,7 +122,8 @@ clean::
 # install
 #------------------------------------------------------------------------------
 install: $(TARGET) z80asm_lib
-	$(INSTALL) $(TARGET)     $(PREFIX)/bin/$(EXEC_PREFIX)$(TARGET)
+	$(INSTALL) $(TARGET)     $(PREFIX)/bin/$(TARGET)
+	$(INSTALL) $(TARGET)     $(PREFIX)/bin/z88dk-$(TARGET)
 	$(INSTALL) asmpp.pl      $(PREFIX)/bin/asmpp.pl
 	$(MAKE) -C dev/z80asm_lib install PREFIX=$(PREFIX_SHARE)
 
@@ -195,6 +199,7 @@ clean::
 	$(RM) zcc_opt.def mandel.bin   mandel.tap
 
 clean::
+	$(RM) -r *.dSYM
 	$(RM) $(TARGET) $(LOCAL_LIB)/$(TARGET) test* $(LOCAL_LIB)/test*
 	$(RM) t/*.tmp $(LOCAL_LIB)/t/*.tmp t/dev/*.tmp
 

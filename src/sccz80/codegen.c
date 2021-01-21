@@ -38,11 +38,27 @@ extern int check_lastop_was_comparison(LVALUE* lval);
 
 extern char Filenorig[];
 
+#ifdef USEFRAME
+extern int CheckOffset(int);
+extern void PutFrame(char,int);
+extern void OutIndex(int);
+#endif
+
+
+static void swap(void);
+static void dpush_under(Kind val_type);
+static void push(const char *ret);
+static void pop(const char *ret);
+static void immed2(void);
+static void constbc(int32_t val);
+static void addbchl(int val);
+static void dcallrts(char *sname,Kind to);
 static void quikmult(int type, int32_t size, char preserve);
 static void threereg(void);
 static void fivereg(void);
 static void sixreg(void);
 static void loada(int n);
+static void setcond(int val);
 
 /*
  * Data for this module
@@ -78,30 +94,36 @@ struct _mapping {
         { "uint2f", "l_int2long_u_float","l_f16_uint2f", "l_f32_uint2f",   "l_f64_uint2f" },
         { "slong2f", "float", "l_f16_slong2f", "l_f32_slong2f", "l_f64_slong2f" },
         { "ulong2f", "ufloat","l_f16_ulong2f", "l_f32_ulong2f", "l_f64_ulong2f" },
+        { "sllong2f", "l_f48_sllong2f", "l_f16_sllong2f", "l_f32_sllong2f", "l_f64_sllong2f" },
+        { "ullong2f", "l_f48_ullong2f", "l_f16_ullong2f", "l_f32_ullong2f", "l_f64_ullong2f" },
         { "f2sint",  "ifix",  "l_f16_f2sint",  "l_f32_f2sint",  "l_f64_f2sint" },
         { "f2uint",  "ifix",  "l_f16_f2uint",  "l_f32_f2uint",  "l_f64_f2uint" },
         { "f2slong", "ifix",  "l_f16_f2slong", "l_f32_f2slong", "l_f64_f2slong" },
         { "f2ulong", "ifix",  "l_f16_f2ulong", "l_f32_f2ulong", "l_f64_f2ulong" },
+        { "f2slllong", "l_f48_f2sllong", "l_f16_f2sllong", "l_f32_f2sllong", "l_f64_f2sllong" },
+        { "f2ullong",  "l_f48_f2ullong", "l_f16_f2ullong", "l_f32_f2ullong", "l_f64_f2ullong" },
         { "fpush",   "dpush",  NULL,            NULL, "l_f64_dpush" },
         { "dpush_under_long", "dpush3", NULL, NULL, "l_f64_dpush3" }, // Inlined
         { "dpush_under_int", "dpush2", NULL, NULL, "l_f64_dpush2" }, // Inlined
         { "fswap", "dswap",   NULL, "l_f32_swap", "l_f64_swap" },
-        { "fnegate", "minusfa", NULL, NULL, "l_f64_negate" },
+        { "fnegate", "minusfa", "l_f16_negate", "l_f32_negate", "l_f64_negate" },
         { "ldexp", "l_f48_ldexp", "l_f16_ldexp", "l_f32_ldexp", "l_f64_ldexp" },
+        { "f16tof", "l_f48_f16tof", "l_f16_f16tof", "l_f32_f16tof", "l_f64_f16tof" },
+        { "ftof16", "l_f48_ftof16", "l_f16_ftof16", "l_f32_ftof16", "l_f64_ftof16" },
         { "inversef", NULL, "l_f16_invf", "l_f32_invf", NULL }, // Called only for IEEE mode
         { NULL }
 };
 
-static const char *map_library_routine(const char *wanted)
+static const char *map_library_routine(const char *wanted, Kind to)
 {
     struct _mapping *map = &mappings[0];
 
     while ( map->opname != NULL ) {
         if ( strcmp(wanted, map->opname) == 0) {
-            if ( c_fp_size == 4 ) {
-                return map->fp_32bit;
-            } else if ( c_fp_size == 2 ) {
+            if (to == KIND_FLOAT16 ) {
                 return map->fp_16bit;
+            } else if ( c_fp_size == 4 ) {
+                return map->fp_32bit;
             } else if ( c_fp_size == 8 ) {
                 return map->fp_64bit;
             }
@@ -112,16 +134,15 @@ static const char *map_library_routine(const char *wanted)
     return wanted;
 }
 
-/* Begin a comment line for the assembler */
-
-void comment(void)
+/* Output a comment line for the assembler */
+void gen_comment(const char *message)
 {
-    outbyte(';');
+    outfmt(";%s\n",message);
 }
 
 /* Put out assembler info before any code is generated */
 
-void header(void)
+void gen_file_header(void)
 {
     time_t tim;
     char* timestr;
@@ -140,9 +161,6 @@ void header(void)
     nl();
 }
 
-/*
- * Print the header for a library function, called from the preprocessor!
- */
 
 void DoLibHeader(void)
 {
@@ -181,6 +199,7 @@ void DoLibHeader(void)
                 segment++;
             else
                 segment = filen;
+            debug_write_module();
             outstr(segment);
         } else {
             /* This handles files produced by a filter cpp */
@@ -194,6 +213,7 @@ void DoLibHeader(void)
             else
                 segment = filen;
             outstr("scp_"); /* alpha id incase tmpfile is numeric */
+            debug_write_module();
             outstr(segment);
         }
         nl();
@@ -207,7 +227,7 @@ void DoLibHeader(void)
 }
 
 /* Print any assembler stuff needed after all code */
-void trailer(void)
+void gen_file_footer(void)
 {
     outfmt("\n; --- End of Compilation ---\n");
 }
@@ -242,8 +262,7 @@ static void switch_namespace(char *name)
         ns = get_namespace(name);
 
         if ( ns != NULL ) {
-            zcallop();
-            outname(ns->bank_function->name, dopref(ns->bank_function)); nl();
+            gen_call(-1, ns->bank_function->name, ns->bank_function);
         }
     }
 
@@ -254,7 +273,7 @@ static void switch_namespace(char *name)
  * able to just check for far to see if we need to pick up second
  * bit of long pointer (check for type POINTER as well...
  */
-void getmem(SYMBOL* sym)
+void gen_load_static(SYMBOL* sym)
 {
     switch_namespace(sym->ctype->namespace);
     if (sym->ctype->kind == KIND_CHAR) {
@@ -293,7 +312,10 @@ void getmem(SYMBOL* sym)
 #endif
     } else if (sym->ctype->kind == KIND_DOUBLE && c_fp_size > 4 ) {
         address(sym);
-        callrts("dload");
+        dcallrts("dload", KIND_DOUBLE);
+    } else if (sym->ctype->kind == KIND_LONGLONG ) {
+        address(sym);
+        callrts("l_i64_load");
     } else if (sym->ctype->kind == KIND_LONG || (sym->ctype->kind == KIND_DOUBLE && c_fp_size == 4) || sym->ctype->kind == KIND_CPTR ) {  // 4 byte doubles only
         if ( IS_GBZ80() ) {
             ot("ld\thl,");
@@ -346,17 +368,22 @@ int getloc(SYMBOL* sym, int off)
 
 /* Store the primary register into the specified */
 /*      static memory cell */
-void putmem(SYMBOL* sym)
+void gen_store_static(SYMBOL* sym)
 {
     switch_namespace(sym->ctype->namespace);
     if (sym->ctype->kind == KIND_DOUBLE && c_fp_size > 4 ) {
         address(sym);
-        callrts("dstore");
+        dcallrts("dstore", KIND_DOUBLE);
     } else if (sym->ctype->kind == KIND_CHAR) {
-        LoadAccum();
+        ol("ld\ta,l");
         ot("ld\t(");
         outname(sym->name, dopref(sym));
         outstr("),a\n");
+    } else if (sym->ctype->kind == KIND_LONGLONG) {
+        ot("ld\tbc,");
+        outname(sym->name, dopref(sym));
+        outstr("\n");
+        callrts("l_i64_store");  
     } else if (sym->ctype->kind == KIND_LONG || (sym->ctype->kind == KIND_DOUBLE && c_fp_size == 4) ) { // 4 byte doubles
         if ( IS_GBZ80() ) {
             ot("ld\tbc,");
@@ -411,36 +438,38 @@ void putmem(SYMBOL* sym)
 /*
  *  Store type at TOS - used for initialising auto vars
  */
-
-void StoreTOS(char typeobj)
+void gen_store_to_tos(Kind typeobj)
 {
     switch (typeobj) {
+    case KIND_LONGLONG:
+        llpush();
+        return;
     case KIND_LONG:
         lpush();
         return;
     case KIND_CHAR:
         ol("dec\tsp");
-        LoadAccum();
-        mainpop();
+        ol("ld\ta,l");
+        pop("hl");
         ol("ld\tl,a");
-        zpush();
+        push("hl");
         Zsp--;
         return;
     case KIND_DOUBLE:
-        dpush();
+        gen_push_float(typeobj);
         return;
     /* KIND_CPTR..untested */
     case KIND_CPTR:
         ol("dec\tsp");
         ol("ld\ta,e");
-        zpop(); /* pop de */
+        pop("de"); /* pop de */
         ol("ld\te,a");
-        zpushde();
-        zpush();
+        push("de");
+        push("hl");
         Zsp--;
         return;
     default:
-        zpush();
+        push("hl");
         return;
     }
 }
@@ -451,7 +480,6 @@ void StoreTOS(char typeobj)
  */
 
 #ifdef USEFRAME
-
 void PutFrame(char typeobj, int offset)
 {
     Type* ctype;
@@ -510,16 +538,19 @@ void putstk(LVALUE *lval)
     //outfmt(";Restore %p flags %02d\n",ptr, flags);
     if (flags & FARACC) {
         /* exx pop hl, pop de, exx */
-        doexx();
-        mainpop();
-        zpop();
-        doexx();
+        ol("exx");
+        pop("hl");
+        pop("de");
+        ol("exx");
         switch (typeobj) {
         case KIND_DOUBLE:
-            callrts("lp_pdoub");
+            dcallrts("lp_pdoub", KIND_DOUBLE);
             break;
         case KIND_CPTR:
             callrts("lp_pptr");
+            break;
+        case KIND_LONGLONG:
+            callrts("lp_i64_load");
             break;
         case KIND_LONG:
             callrts("lp_plong");
@@ -546,7 +577,7 @@ void putstk(LVALUE *lval)
 
         if ( lval->ltype->bit_size + bit_offset <= 8 ) {
             int i;
-            zpop();  // de address
+            pop("de"); // de address
             if ( doinc ) {
                 ol("inc\tde");
             }
@@ -571,7 +602,7 @@ void putstk(LVALUE *lval)
             // hl = value, lets shift into the right place
             asl_const(lval, lval->ltype->bit_offset);
             zand_const(lval,((1 << lval->ltype->bit_size) - 1) << bit_offset);
-            zpop();  // de = destination address
+            pop("de");  // de = destination address
             ol("ld\ta,(de)");
             outfmt("\tand\t%d\n",(0xffff - (((1 << lval->ltype->bit_size) - 1) << bit_offset)) % 256);
             ol("or\tl");
@@ -589,36 +620,37 @@ void putstk(LVALUE *lval)
     switch (typeobj) {
     case KIND_DOUBLE:
         if ( c_fp_size > 4) {
-            mainpop();
-            callrts("dstore");
-        } else if ( c_fp_size == 2 ) {
-            zpop();
-            callrts("dstore");
+            pop("hl");
+            dcallrts("dstore", KIND_DOUBLE);
         } else {
-            zpopbc();
-            callrts("dstore");
+            pop("bc");
+            dcallrts("dstore", KIND_DOUBLE);
         }
         break;
     case KIND_CPTR:
-        zpopbc();
+        pop("bc");
         callrts("l_putptr");
         break;
+    case KIND_LONGLONG:
+        pop("bc");
+        callrts("l_i64_store");
+        break;    
     case KIND_LONG:
-        zpopbc();
+        pop("bc");
         callrts("l_plong");
         break;
     case KIND_CHAR:
-        zpop();
-        LoadAccum();
+        pop("de");
+        ol("ld\ta,l");
         ol("ld\t(de),a");
         break;
     case KIND_STRUCT:
-        zpop();
+        pop("de");
         outfmt("\tld\tbc,%d\n",lval->ltype->size);
         ol("ldir");
         break;
-    default:
-        zpop();
+    default: 
+        pop("de");
         callrts("l_pint");
     }
 }
@@ -665,7 +697,7 @@ void put2tos(void)
  *            if n=0 then emit xor a instead of ld a,0 
  *            (this is picked up by the optimizer, but even so)
  */
-void loadargc(int n)
+static void loadargc(int n)
 {
     n >>= 1;
     loada(n);
@@ -694,7 +726,7 @@ void get_bitfield(LVALUE *lval)
     if ( lval->ltype->bit_size + bit_offset <= 8 ) {
         int i;
         ol("ld\ta,(hl)");
-        // TODO: Shift left as necessary
+        // Shift left as necessary
         if ( bit_offset >= 4) {
             for ( i = 0; i < (8 - bit_offset); i++ ) {
                 ol("rlca");
@@ -755,7 +787,7 @@ void get_bitfield(LVALUE *lval)
 
 /* Fetch the specified object type indirect through the */
 /*      primary register into the primary register */
-void indirect(LVALUE* lval)
+void gen_load_indirect(LVALUE* lval)
 {
     char sign;
     char flags;
@@ -778,11 +810,14 @@ void indirect(LVALUE* lval)
         case KIND_CPTR:
             callrts("lp_gptr");
             break;
+        case KIND_LONGLONG:
+            callrts("lp_glonglong");
+            break;
         case KIND_LONG:
             callrts("lp_glong");
             break;
         case KIND_DOUBLE:
-            callrts("lp_gdoub");
+            dcallrts("lp_gdoub",KIND_DOUBLE);
             break;
         case KIND_STRUCT:
             warningfmt("incompatible-pointer-types","Cannot retrieve a struct via __far");
@@ -814,11 +849,14 @@ void indirect(LVALUE* lval)
     case KIND_CPTR:
         callrts("l_getptr");
         break;
+    case KIND_LONGLONG:
+        callrts("l_i64_load");
+        break;
     case KIND_LONG:
         callrts("l_glong");
         break;
     case KIND_DOUBLE:
-        callrts("dload");
+        dcallrts("dload",KIND_DOUBLE);
         break;
     case KIND_STRUCT:
         break;
@@ -834,7 +872,7 @@ void indirect(LVALUE* lval)
 }
 
 /* Swap the primary and secondary registers */
-void swap(void)
+static void swap(void)
 {
     if ( IS_GBZ80() ) {
         // Crude emulation - we can probably do better on a case by case basis
@@ -856,7 +894,7 @@ void immed(void)
 
 /* Print partial instruction to get an immediate value */
 /*      into the secondary register */
-void immed2(void)
+static void immed2(void)
 {
     ot("ld\tde,");
 }
@@ -868,70 +906,67 @@ void immedlit(int lab, int offs)
 }
 
 /* Push long onto stack */
-
 void lpush(void)
 {
-    zpushde();
-    zpush();
+    push("de");
+    push("hl");
 }
 
-void lpush2(void)
+void llpush(void)
 {
-    callrts("lpush2");
-    Zsp -= 4;
+    callrts("l_i64_push");
+    Zsp -= 8;
 }
 
-/* Push and pop flags (used for ? operator) */
-
-void zpushflags(void)
+void gen_push_primary(LVALUE *lval)
 {
-    ol("push\taf");
-    Zsp -= 2;
-}
-
-void zpopflags(void)
-{
-    ol("pop\taf");
-    Zsp += 2;
-}
-
-/* Push secondary register/high work of long onto the stack */
-
-void zpushde(void)
-{
-    ol("push\tde");
-    Zsp -= 2;
+    switch ( lval->val_type ) {
+    case KIND_DOUBLE:
+    case KIND_FLOAT16:
+        gen_push_float(lval->val_type);
+        break;
+    case KIND_LONGLONG:
+        llpush();
+        break;
+    case KIND_LONG:
+    case KIND_CPTR:
+        lpush();
+        break;
+    default:
+        zpush();
+    }
 }
 
 /* Push the primary register onto the stack */
-
 void zpush(void)
 {
-    ol("push\thl");
-    Zsp -= 2;
+    push("hl");
 }
 
 /* Push the primary floating point register onto the stack */
 
-void dpush(void)
+void gen_push_float(Kind typeToPush)
 {
-    if ( c_fp_size == 4 ) {
-        zpushde();
-        zpush();
-    } else if ( c_fp_size == 2 ) {
-        zpush();
+    if ( typeToPush == KIND_FLOAT16 ) {
+        push("hl");
+    } else if ( c_fp_size == 4 ) {
+        push("de");
+        push("hl");
     } else {
-        callrts("fpush");
+        dcallrts("fpush",KIND_DOUBLE);
         Zsp -= c_fp_size;
     }
 }
 
 /* Push an argument for a function pointer call: regular or far pointer */
-int push_function_argument(Kind expr, Type *type, int push_sdccchar)
+int gen_push_function_argument(Kind expr, Type *type, int push_sdccchar)
 {
     if (expr == KIND_DOUBLE) {
-        dpush();
+        gen_push_float(expr);
         return type_double->size;
+    } else if ( expr == KIND_LONGLONG ) {
+        llpush();
+        return 8;
     } else if (expr == KIND_LONG || expr == KIND_CPTR) {
         lpush();
         return 4;
@@ -953,24 +988,38 @@ int push_function_argument(Kind expr, Type *type, int push_sdccchar)
         return type->size;
     } 
     // Default push the word
-    zpush();
+    push("hl");
     return 2;
 }
 
-/* Push an argument for a function pointer call */
-int push_function_argument_fnptr(Kind expr, Type *type, int push_sdccchar, int is_last_argument)
+/* Push an argument for a function pointer call 
+ *
+ * \return The stack offset
+ * 
+ * For int/long sized parameters, we need to leave the parameter in the registers for the last
+ * argument
+ */
+int push_function_argument_fnptr(Kind expr, Type *type, Type *functype, int push_sdccchar, int is_last_argument)
 {
     if (expr == KIND_LONG || expr == KIND_CPTR || ( c_fp_size == 4 && expr == KIND_DOUBLE)) {
-        if ( !is_last_argument ) {
+        if (is_last_argument == 0 || (functype->flags & FASTCALL) == 0 ) {
             swap(); /* MSW -> hl */
-            swapstk(); /* MSW -> stack, addr -> hl */
-            zpushde(); /* LSW -> stack, addr = hl */
+            ol("ex\t(sp),hl"); /* MSW -> stack, addr -> hl */
+            push("de"); /* LSW -> stack, addr = hl */
+            return 4;
         }
-        return 4;
-    } else if (expr == KIND_DOUBLE && c_fp_size != 2 ) {
-        dpush_under(KIND_INT);
-        mainpop();
-        return c_fp_size;
+    } else if ( expr == KIND_LONGLONG ) {
+        if (is_last_argument == 0 || (functype->flags & FASTCALL) == 0 ) {
+            callrts("l_i64_push_under_int");
+            Zsp -= 6;
+            return 8;
+        }
+    } else if (expr == KIND_DOUBLE  ) {
+        if (is_last_argument == 0 || (functype->flags & FASTCALL) == 0 ) {
+            dpush_under(KIND_INT);
+            pop("hl");
+            return c_fp_size;
+        }
     } else if (expr == KIND_STRUCT ) {
         // 13 bytes
         swap();    // de = address of struct
@@ -983,124 +1032,124 @@ int push_function_argument_fnptr(Kind expr, Type *type, int push_sdccchar, int i
         swap();
         outfmt("\tld\tbc,%d\n",type->size);
         ol("ldir");
-        mainpop();
+        pop("hl");
         return type->size;
-    } 
-    if ( !is_last_argument ) {
+    } else if (is_last_argument == 0 || (functype->flags & FASTCALL) == 0 ) {
         if ( IS_GBZ80() ) {
             ol("ld\td,h");
             ol("ld\te,l");
             ol("pop\thl");
             ol("push\tde");
         } else {
-            swapstk();
+            ol("ex\t(sp),hl");
         }
+        return 2;
     }
-    return 2;
+    return 0;
 }
 
 
 
-/* Push the primary floating point register, preserving
-        the top value  */
-void dpush_under(int val_type)
+/* Push the primary floating point register, preserving the top value  */
+void dpush_under(Kind val_type) 
 {
-    // This isn't call for float16
+   // Only called for KIND_DOUBLE
     if ( val_type == KIND_LONG || val_type == KIND_CPTR ) {
         if ( c_fp_size == 4 ) {
             ol("pop\tbc");	// addr2 -> bc
             swap(); /* MSW -> hl */
-            swapstk(); /* MSW -> stack, addr1 -> hl */
-            zpushde(); /* LSW -> stack, addr1 = hl */
-            zpush();   // addr -> stack
+            ol("ex\t(sp),hl"); /* MSW -> stack, addr1 -> hl */
+            push("de"); /* LSW -> stack, addr1 = hl */
+            push("hl");   // addr -> stack
             ol("push\tbc"); // addr2 -> stack
         } else {
-           callrts("dpush_under_long");
+           dcallrts("dpush_under_long",KIND_DOUBLE);
            Zsp -= c_fp_size;
         }
     } else {
         if ( c_fp_size == 4 ) {
             swap(); /* MSW -> hl */
-            swapstk(); /* MSW -> stack, addr -> hl */
-            zpushde(); /* LSW -> stack, addr = hl */
-            zpush();
+            ol("ex\t(sp),hl"); /* MSW -> stack, addr -> hl */
+            push("de"); /* LSW -> stack, addr = hl */
+            push("hl");
         } else if (c_fp_size == 2 ) {
-            swapstk(); /* float -> stack, addr -> hl */
-            zpush();
+            ol("ex\t(sp),hl"); /* float -> stack, addr -> hl */
+            push("hl");
         } else {
-            callrts("dpush_under_int");
+            dcallrts("dpush_under_int",KIND_DOUBLE);
             Zsp -= c_fp_size;
         }
     }
 }
 
-/* Pop the top of the stack into the primary register */
-void mainpop(void)
+
+static void push(const char *reg)
 {
-    ol("pop\thl");
+    outfmt("\tpush\t%s\n",reg);
+    Zsp -= 2;
+}
+
+static void pop(const char *reg)
+{
+    outfmt("\tpop\t%s\n",reg);
     Zsp += 2;
 }
+
 
 /* Pop the top of the stack into the secondary register */
 void zpop(void)
 {
-    ol("pop\tde");
-    Zsp += 2;
+    pop("de");
 }
-
-/* Pop top of stack into bc */
-
-void zpopbc(void)
-{
-    ol("pop\tbc");
-    Zsp += 2;
-}
-
-/* Swap af & af' (preserve carry) */
-
-static void doexaf(void)
-{
-    ol("ex\taf,af");
-}
-
-/* Swap between the sets of registers */
-
-void doexx(void)
-{
-    ol("exx");
-}
-
-/* Swap the primary register and the top of the stack */
-void swapstk(void)
-{
-    ol("ex\t(sp),hl");
-}
-
-/* process switch statement */
-void sw(char type)
-{
-    if (type == KIND_LONG || type == KIND_CPTR)
-        callrts("l_long_case");
-    else
-        callrts("l_case");
-}
-
 
 /* Output the call op code */
-
-void zcallop(void)
+void gen_call(int arg_count, const char *name, SYMBOL *sym)
 {
-    ot("call\t");
+    if (sym->ctype->return_type->kind == KIND_LONGLONG) {
+        ol("ld\tbc,__i64_acc");
+        push("bc");
+    }
+    if (arg_count != -1 ) {
+        loadargc(arg_count);
+    }
+    ot("call\t"); outname(name, dopref(sym)); nl();
 }
 
-void zshortcall(int rst, int value) 
+void gen_shortcall(Type *functype, int rst, int value) 
 {
-    outfmt("\trst\t%d\n",rst);
-    outfmt("\t%s\t%d\n", value < 0x100 ? "defb" : "defw", value);
+    if ((functype->flags & SHORTCALL_HL) == SHORTCALL_HL) {
+        if ((functype->flags & FASTCALL) == FASTCALL) {
+            // preserve HL from FASTCALL into BC because hl is going to erase it
+            outfmt("\tld bc,\thl\n");
+        }
+        vconst(value);
+        outfmt("\trst\t%d\n", rst);
+    } else {
+        if (functype->return_type->kind == KIND_LONGLONG) {
+            ol("ld\tbc,__i64_acc");
+            push("bc");
+        }
+        outfmt("\trst\t%d\n",rst);
+        outfmt("\t%s\t%d\n", value < 0x100 ? "defb" : "defw", value);
+    }
 }
 
-void zbankedcall(SYMBOL *sym)
+void gen_hl_call(Type *functype, int module, int address)
 {
+    if ((functype->flags & FASTCALL) == FASTCALL) {
+        // preserve HL from FASTCALL into BC because hl is going to erase it
+        outfmt("\tld bc,\thl\n");
+    }
+    vconst(module);
+    outfmt("\tcall\t%d\n", address);
+}
+
+void gen_bankedcall(SYMBOL *sym)
+{
+    if (sym->ctype->return_type->kind == KIND_LONGLONG) {
+        ol("ld\tbc,__i64_acc");
+        push("bc");
+    }
     ol("call\tbanked_call");
     ot("defq\t"); outname(sym->name, dopref(sym)); nl();
 }
@@ -1120,19 +1169,20 @@ char dopref(SYMBOL* sym)
 /* Call a run-time library routine */
 void callrts(char* sname)
 {
-    const char *func_name = map_library_routine(sname);
+    const char *func_name = map_library_routine(sname, KIND_VOID);
     ot("call\t");
     outstr(func_name);
     nl();
 }
 
-/* Return from subroutine */
-void zret(void)
+void dcallrts(char* sname, Kind to)
 {
-    ol("ret");
-    nl();
+    const char *func_name = map_library_routine(sname, to);
+    ot("call\t");
+    outstr(func_name);
     nl();
 }
+
 
 /*
  * Perform subroutine call to value on top of stack
@@ -1145,8 +1195,8 @@ int callstk(Type *type, int n, int isfarptr, int last_argument_size)
     if ( isfarptr ) {
         // The function address is on the stack at +n
         if ( n > 0 ) {
-            outfmt("\tld\thl,%d\n",n);
-            ol("add\thl,de");
+            vconst(n);
+            ol("add\thl,sp");
             ol("ld\te,(hl)");
             ol("inc\thl");
             ol("ld\td,(hl)");
@@ -1156,58 +1206,54 @@ int callstk(Type *type, int n, int isfarptr, int last_argument_size)
         }
         loadargc(n);
         callrts("l_farcall");
-    } else if ( type->flags & FASTCALL && last_argument_size < 6 ) {
-        int ret = -2;
-        int label = getlabel();		  
-        // TOS = address, dehl = parameter
-        // More than one argument, TOS = last parameter, hl = function
-        // For long sp+0 = LSW, sp +2 = MSW, hl = function
+    } else if ( type->flags & FASTCALL && last_argument_size <= 4 ) {
+        int ret = 0;
+        int label = getlabel();
+
+        // TOS = address, dehl = parameter (or in memory)
         if ( last_argument_size == 2 ) {
-            ol("pop\taf");
-            outstr("\tld\tbc,"); printlabel(label);  nl();	// bc = return address
-            ol("push\tbc");
-            ol("push\taf");
-            Zsp += 2;
-            ret = -4;
-         } else {
-            ol("pop\taf");
-            outstr("\tld\tbc,"); printlabel(label);  nl();	// bc = return address
-            ol("push\tbc"); /* Return address */		
-            ol("push\taf");		
-            Zsp += 2;
-         } 
-         ol("ret");		
-         postlabel(label);
-         return ret;
-    } else {
-        if (last_argument_size == 2) {
-            /* At this point, TOS = function, hl = argument */
-            if ( IS_GBZ80() ) {
-                ol("ld\td,h");
-                ol("ld\te,l");
-                ol("pop\thl");
-                ol("push\tde");
-            } else {
-                swapstk();
-            }
-        } else if ( last_argument_size == 4) {
-            /* At this point, TOS = function, dehl = argument */
-            swap(); /* MSW -> hl */
-            swapstk(); /* MSW -> stack, addr -> hl */
-            zpushde(); /* LSW -> stack, addr = hl */
+            ret -= 4;
         }
-        
+
+        ol("pop\taf");  // TODO: 8080/gbz80 doesn't work here
+        if (type->return_type->kind == KIND_LONGLONG) {
+            ol("ld\tbc,__i64_acc");
+            push("bc");
+        }
+        outstr("\tld\tbc,"); printlabel(label);  nl();     // bc = return address
+        ol("push\tbc");
+        ol("push\taf");
+        Zsp += 2;
+
+        ol("ret");
+        postlabel(label);
+        return ret;
+    } else {
+        // Non __z88dk_fastcall function pointers and those qwhich have a
+        // fastcall argument that's stored in memory
         if ( type->funcattrs.hasva ) 
             loadargc(n);
 
+        if (type->return_type->kind == KIND_LONGLONG) {
+            ol("ld\tbc,__i64_acc");
+            push("bc");
+        }
         callrts("l_jphl");
     }
     return 0;
 }
 
+void gen_save_pointer(LVALUE *lval)
+{
+    if (lval->flags & FARACC)
+        lpush();
+    else
+        zpush();
+}
+
 
 /* Jump to specified internal label number */
-void jump(int label)
+void gen_jp_label(int label)
 {
     opjump("", label);
 }
@@ -1248,7 +1294,7 @@ void jumpnc(int label)
     opjump("nc,", label);
 }
 
-void setcond(int val)
+static void setcond(int val)
 {
     if (val == 1)
         ol("scf");
@@ -1271,9 +1317,17 @@ void testjump(LVALUE* lval, int label)
     if (type == KIND_LONG && check_lastop_was_comparison(lval)) {
         ol("or\td");
         ol("or\te");
-    }
-    if (type == KIND_CPTR && check_lastop_was_comparison(lval)) {
+    } else if (type == KIND_CPTR && check_lastop_was_comparison(lval)) {
         ol("or\te");
+    } else if ( type == KIND_LONGLONG && check_lastop_was_comparison(lval)) {
+        ol("or\td");
+        ol("or\te");
+        ol("exx");
+        ol("or\th");
+        ol("or\tl");
+        ol("or\td");
+        ol("or\te");
+        ol("exx");
     }
     opjump("z,", label);
 }
@@ -1323,9 +1377,9 @@ void point(void)
  * \param type 1=c, 2=nc, 0=no carry state
  * \param incritical - We're in a critical section, restore interrupts 
  */
-void leave(Kind vartype, char type, int incritical)
+void gen_leave_function(Kind vartype, char type, int incritical)
 {
-    // int savesp;
+    int savesp;
     Kind save = vartype;
     int callee_cleanup = (currfn->ctype->flags & CALLEE) && (stackargs > 2);
 
@@ -1338,54 +1392,80 @@ void leave(Kind vartype, char type, int incritical)
     else if ( vartype == KIND_DOUBLE ) {
         if ( c_fp_size == 4 ) {
             vartype = KIND_LONG;
-        } else if ( c_fp_size == 2 ) {
-            vartype = KIND_INT;
         } else {
             vartype = KIND_NONE;
             save = NO;
         }
+    } else if (vartype == KIND_FLOAT16 ) {
+        vartype = KIND_INT;
+    } else if (vartype == KIND_LONGLONG) {
+        vartype = KIND_NONE;
     }
-
-    modstk(0, save, NO,YES);
+    modstk(0, vartype, NO,YES);
 
     if (callee_cleanup) {
         int bcused = 0;
 
-        // savesp = Zsp;
+        // TODO: LONGLONG stuffed pointer
+
+        savesp = Zsp;
         Zsp = -stackargs;
 
-        if ( c_notaltreg && ( vartype != KIND_NONE && vartype != KIND_DOUBLE) && abs(Zsp) >= 11 ) {
+        if ( save == KIND_LONGLONG) {
+            pop("de");
+            pop("hl");
+            push("de");
+            callrts("l_i64_copy");
+        }
+
+        if ( c_notaltreg && ( vartype != KIND_NONE && vartype != KIND_DOUBLE && vartype != KIND_LONGLONG) && abs(Zsp) >= 11 ) {
             // 8080, save hl, pop return int hl
-            savehl();
-            mainpop();
+            ol("ld\t(saved_hl),hl");
+            pop("hl");
         } else {
             // Pop return address into bc
-            zpopbc();
+            pop("bc");
             bcused = 1;
         }
 
         if ( Zsp > 0 ) {
             errorfmt("Internal error: Cannot cleanup function by lowering sp: Zsp=%d",1,Zsp);
         }
-        modstk(0, save, NO, !bcused);
+        modstk(0, vartype, NO, !bcused);
 
         if ( bcused ) {
             ol("push\tbc");
-            Zsp -= 2;
         } else {
-            zpush();
-            restorehl();
-        }
+            push("hl");
+            ol("ld\thl,(saved_hl)");
+         }
+         Zsp = savesp;
     }
-    popframe(); /* Restore previous frame pointer */
+    gen_pop_frame(); /* Restore previous frame pointer */
 
     /* Naked has already returned */
     if ( (currfn->flags & CRITICAL) == CRITICAL || incritical) {
-        zleavecritical();
+        gen_critical_leave();
     }
+
+    if ( !callee_cleanup && save == KIND_LONGLONG ) {
+        pop("de");
+        pop("hl");
+        push("hl");
+        push("de");
+        callrts("l_i64_copy");
+    }
+
+
     if (type)
         setcond(type);
-    zret(); /* and exit function */
+    ol("ret"); nl(); nl(); /* and exit function */
+}
+
+
+int gen_restore_frame_after_call(int offset, Kind save, int saveaf, int usebc)
+{
+    return modstk(Zsp + offset, save, saveaf, usebc);
 }
 
 /* Modify the stack pointer to the new value indicated 
@@ -1412,10 +1492,10 @@ int modstk(int newsp, Kind save, int saveaf, int usebc)
     if (c_framepointer_is_ix != -1) {
         if ( saveaf ) {
             if ( c_noaltreg ) {
-                zpushflags();
-                zpopbc();
+                push("af");
+                pop("bc");
             } else {
-                doexaf();
+                 ol("ex\taf,af");
             }
         }
         outfmt("\tld\t%s,%d\n",FRAME_REGISTER, k);
@@ -1425,9 +1505,9 @@ int modstk(int newsp, Kind save, int saveaf, int usebc)
             if ( c_noaltreg ) {
                 ol("push\tbc");
                 Zsp -= 2;
-                zpopflags();
+                pop("af");
             } else {
-                doexaf();
+                 ol("ex\taf,af");
             }
         }
         return newsp;
@@ -1473,10 +1553,10 @@ int modstk(int newsp, Kind save, int saveaf, int usebc)
     else if ( save == KIND_DOUBLE ) {
         if ( c_fp_size == 4 ) {
             save = KIND_LONG;
-        } else if ( c_fp_size == 2 ) {
-            save = KIND_INT;
         }
         // For a 6/8 byte double the value is safely in the exx set or in FA 
+    } else if ( save == KIND_FLOAT16 ) {
+        save = KIND_INT;
     }
 
     if ( c_notaltreg ) {
@@ -1503,13 +1583,13 @@ int modstk(int newsp, Kind save, int saveaf, int usebc)
     }
 
     // We're on a z80 or other platform with alt registers
-    if ( saveaf ) doexaf();
-    if ( ( save != KIND_NONE && save != KIND_DOUBLE)) doexx();
+    if ( saveaf )  ol("ex\taf,af");
+    if ( ( save != KIND_NONE && save != KIND_DOUBLE && save != KIND_LONGLONG)) ol("exx");
     vconst(k);
     ol("add\thl,sp");
     ol("ld\tsp,hl");
-    if ( ( save != KIND_NONE && save != KIND_DOUBLE)) doexx();
-    if ( saveaf ) doexaf();
+    if ( ( save != KIND_NONE && save != KIND_DOUBLE && save != KIND_LONGLONG)) ol("exx");
+    if ( saveaf )  ol("ex\taf,af");
 
     return newsp;
 }
@@ -1520,6 +1600,7 @@ void scale(Kind type, Type *tag)
     switch (type) {
     case KIND_INT:
     case KIND_PTR:
+    case KIND_FLOAT16:
         ol("add\thl,hl");
         break;
     case KIND_CPTR:
@@ -1529,11 +1610,14 @@ void scale(Kind type, Type *tag)
         ol("add\thl,hl");
         ol("add\thl,hl");
         break;
+    case KIND_LONGLONG:
+        ol("add\thl,hl");
+        ol("add\thl,hl");
+        ol("add\thl,hl");
+        break;
     case KIND_DOUBLE:
         if ( c_fp_size == 4 ) {
             ol("add\thl,hl");
-            ol("add\thl,hl");
-        } else if ( c_fp_size == 2 ) {
             ol("add\thl,hl");
         } else {
             sixreg();
@@ -1549,11 +1633,9 @@ void scale(Kind type, Type *tag)
 }
 
 
-
-
-void quikmult(int type, int32_t size, char preserve)
+static void quikmult(int type, int32_t size, char preserve)
 {
-    if ( type == KIND_LONG ) {
+     if ( type == KIND_LONG ) {
         LVALUE lval = {0};
 
         lval.val_type = type;
@@ -1780,6 +1862,17 @@ void quikmult(int type, int32_t size, char preserve)
         fivereg();
         ol("add\thl,hl");
         break;
+    case 20:
+        fivereg();
+        ol("add\thl,hl");
+        ol("add\thl,hl");
+        break;
+    case 40:
+        fivereg();
+        ol("add\thl,hl");
+        ol("add\thl,hl");
+        ol("add\thl,hl");
+        break;
     case 14:
         ol("add\thl,hl");
     case 7:
@@ -1841,6 +1934,10 @@ static void sixreg(void)
 void zadd(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_add");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if ( c_speed_optimisation & OPT_ADD32 && !IS_808x() && !IS_GBZ80() ) {
@@ -1855,8 +1952,12 @@ void zadd(LVALUE* lval)
         }
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fadd",lval->val_type);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fadd");
+        dcallrts("fadd",lval->val_type);
         Zsp += c_fp_size;
         break;
     default:
@@ -1865,7 +1966,7 @@ void zadd(LVALUE* lval)
 }
 
 
-static int add_to_high_word(int32_t value) 
+static int add_to_high_word(int64_t value) 
 {
     int16_t    delta = value >> 16;
 
@@ -1894,8 +1995,24 @@ static int add_to_high_word(int32_t value)
     return 1; // Handled it
 }
 
-void zadd_const(LVALUE *lval, int32_t value)
+void zadd_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
+    if ( lval->val_type == KIND_LONGLONG ) {
+        // TODO: If 2 <= value <= 255 then there's a libsrc call to add a
+        if ( value == 1 ) {
+            inc(lval);
+        } else if ( value == -1 ) {
+            inc(lval);
+        } else if ( value != 0 ) {
+            llpush();       
+            vllongconst(value64);
+            zadd(lval);
+        }
+        return;
+    }
+
+
     switch (value) {
     case -3:
         if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR ) 
@@ -1992,14 +2109,37 @@ void zadd_const(LVALUE *lval, int32_t value)
             add_to_high_word(value);          // it will be < 7 bytes, 33T
         } else {
             ol("ex\tde,hl");                      // 1, 4
-            // TODO: 8080
+            // TODO: 8080/gbz80 - this adc is emulated and we could probably do better with an 8 bit operation
             constbc(((uint32_t)value) / 65536);   // 3, 10
             ol("adc\thl,bc");                     // 2, 15
             ol("ex\tde,hl");                      // 1, 4
         }
 
     } else {
-        addbchl(value);
+        if ( value % 256 == 0 ) {
+            switch ( value / 256 ) {
+            case 3:
+                ol("inc\th");
+            case 2:
+                ol("inc\th");
+            case 1:
+                ol("inc\th");
+                break;
+            case -3:
+                ol("dec\th");
+            case -2:
+                ol("dec\th");
+            case -1:
+                ol("dec\th");
+                break;
+            default:
+                loada(value / 256);
+                ol("add\th");
+                ol("ld\th,a");
+            }
+        } else {
+            addbchl(value);
+        }
     }
 }
 
@@ -2008,6 +2148,10 @@ void zadd_const(LVALUE *lval, int32_t value)
 void zsub(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_sub");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if ( c_speed_optimisation & OPT_SUB32 && !IS_8080() && !IS_GBZ80() ) {
@@ -2027,8 +2171,12 @@ void zsub(LVALUE* lval)
         }
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fsub",lval->val_type);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fsub");
+        dcallrts("fsub",lval->val_type);
         Zsp += c_fp_size;
         break;
     default:
@@ -2047,13 +2195,21 @@ void zsub(LVALUE* lval)
 void mult(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_mult");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_mult");
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fmul",lval->val_type);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fmul");
+        dcallrts("fmul",lval->val_type);
         Zsp += c_fp_size;
         break;
     case KIND_CHAR:
@@ -2084,9 +2240,32 @@ void mult(LVALUE* lval)
     }
 }
 
-void mult_const(LVALUE *lval, int32_t value)
+void mult_const(LVALUE *lval, int64_t value64)
 {
-    quikmult(lval->val_type, value, NO);
+    int32_t value = (int32_t)value64;
+    if ( lval->val_type == KIND_LONGLONG ) {
+        int c = 0;
+        int64_t p = value64;
+        // Determine if it's a power of two:
+        while (((p & 1) == 0) && p > 1) { /* While x is even and > 1 */
+            c++;
+            p >>= 1;
+        }
+        if ( p == 1 ) {
+            llpush();
+            loada(c);
+            callrts("l_i64_aslo");
+            Zsp += 8;
+        } else {           
+            llpush();       
+            vllongconst(value);
+            callrts("l_i64_mult");
+            Zsp += 8;
+        }
+        return;
+    } else {
+        quikmult(lval->val_type, value, NO);
+    }
 }
 
 int mult_dconst(LVALUE *lval, double value, int isrhs)
@@ -2094,16 +2273,11 @@ int mult_dconst(LVALUE *lval, double value, int isrhs)
     int exp;
 
     if ( value == 1.0 ) {
-        // We don't need to do anything
-        lval->ltype = type_double;
-        lval->val_type = KIND_DOUBLE;
         return 1;
     } else if ( frexp(value, &exp) == 0.5 ) {
         // It's a power of two so we can nobble the exponent
         loada(exp - 1);
-        callrts("ldexp");
-        lval->ltype = type_double;
-        lval->val_type = KIND_DOUBLE;
+        dcallrts("ldexp",lval->val_type);
         return 1;
     }
 
@@ -2116,6 +2290,13 @@ int mult_dconst(LVALUE *lval, double value, int isrhs)
 void zdiv(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        if (ulvalue(lval))
+            callrts("l_i64_div_u");
+        else
+            callrts("l_i64_div");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if (ulvalue(lval))
@@ -2124,8 +2305,12 @@ void zdiv(LVALUE* lval)
             callrts("l_long_div");
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fdiv",lval->val_type);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fdiv");
+        dcallrts("fdiv",lval->val_type);
         Zsp += c_fp_size;
         break;
     default:
@@ -2170,9 +2355,15 @@ static void add_if_negative(LVALUE *lval, int32_t toadd)
     postlabel(label);
 }
 
-void zdiv_const(LVALUE *lval, int32_t value)
+void zdiv_const(LVALUE *lval, int64_t value64)
 {
-    if ( lval->val_type == KIND_LONG && ulvalue(lval) ) {
+    int32_t value = (int32_t)value64;
+    if ( lval->val_type == KIND_LONGLONG ) {
+        llpush();       
+        vllongconst(value64);
+        zdiv(lval);
+        return;
+    } else if ( lval->val_type == KIND_LONG && ulvalue(lval) ) {
         if ( value == 256 ) {
             ol("ld\tl,h");
             ol("ld\th,e");
@@ -2250,10 +2441,9 @@ void zdiv_const(LVALUE *lval, int32_t value)
 
 int zdiv_dconst(LVALUE *lval, double value, int isrhs)
 {
-    if ( isrhs == 0.0 && value == 1.0 && (c_maths_mode == MATHS_IEEE || c_maths_mode == MATHS_IEEE16)) {
-        callrts("inversef");
-        lval->ltype = type_double;
-        lval->val_type = KIND_DOUBLE;
+    if ( isrhs == 0 && value == 1.0 && 
+        (c_maths_mode == MATHS_IEEE || lval->val_type == KIND_FLOAT16)) {
+        dcallrts("inversef",lval->val_type);
         return 1;
     }
     return 0;
@@ -2274,22 +2464,29 @@ void zmod(LVALUE* lval)
         Zsp += 4;
     } else {
         if ( IS_GBZ80() ) {
-            // TODO: This or just load registers?
             if (ulvalue(lval))
                 callrts("l_mod_u");
             else
                 callrts("l_mod");
+        } else if ( lval->val_type == KIND_LONGLONG) {
+            if (ulvalue(lval))
+                callrts("l_i64_mod_u");
+            else
+                callrts("l_i64_mod");
+        } else if (lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
+            if (ulvalue(lval))
+                callrts("l_long_mod_u");
+            else
+                callrts("l_long_mod");
+            Zsp += 4;
         } else {
             zdiv(lval);
-            if (lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR)
-                doexx();
-            else
-                swap();
+            swap();
         }
     }
 }
 
-void negate_if_negative(LVALUE *lval, int32_t value)
+void negate_if_negative(LVALUE *lval, int64_t value)
 {
     int label;
     // Only need to consider int handling here
@@ -2327,9 +2524,10 @@ void negate_if_negative(LVALUE *lval, int32_t value)
     postlabel(label);
 }
 
-void zmod_const(LVALUE *lval, int32_t value)
+void zmod_const(LVALUE *lval, int64_t value64)
 {
     LVALUE  templval={0};
+    int32_t value = (int32_t)value64;
 
     templval.val_type = KIND_INT;
     if ( ulvalue(lval) ) 
@@ -2357,7 +2555,12 @@ void zmod_const(LVALUE *lval, int32_t value)
             zmod(lval);
             return;
         }
-    } 
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush();
+        vllongconst(value64);
+        zmod(lval);
+        return;        
+    }
 
     switch ( value ) {
         case 1:
@@ -2411,6 +2614,10 @@ void zmod_const(LVALUE *lval, int32_t value)
 void zor(LVALUE* lval )
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_or");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_or");
@@ -2422,7 +2629,7 @@ void zor(LVALUE* lval )
 }
 
 
-int zor_handle_pow2(int32_t value) 
+int zor_handle_pow2(int64_t value) 
 {
     int c = 0;
     switch ( value ) {
@@ -2509,9 +2716,14 @@ int zor_handle_pow2(int32_t value)
 }
 
 
-void zor_const(LVALUE *lval, int32_t value)
+void zor_const(LVALUE *lval, int64_t value64)
 {
-    if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
+    int32_t value = (int32_t)value64;
+    if ( lval->val_type == KIND_LONGLONG ) {
+        llpush();
+        vllongconst(value64);
+        zor(lval);
+    } else if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( zor_handle_pow2(value) ) {
             return;
         } else if ( (value & 0xFFFFFF00) == 0 ) {
@@ -2558,6 +2770,10 @@ void zor_const(LVALUE *lval, int32_t value)
 void zxor(LVALUE *lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_xor");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_xor");
@@ -2568,9 +2784,14 @@ void zxor(LVALUE *lval)
     }
 }
 
-void zxor_const(LVALUE *lval, int32_t value)
+void zxor_const(LVALUE *lval, int64_t value64)
 {
-    if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
+    int32_t value = (int32_t)value64;
+    if ( lval->val_type == KIND_LONGLONG ) {
+        llpush();
+        vllongconst(value64);
+        zxor(lval);
+    } else if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( (value & 0xFFFFFF00) == 0 ) {
             ol("ld\ta,l");
             ot("xor\t"); outdec(value % 256); nl();
@@ -2618,6 +2839,10 @@ void zxor_const(LVALUE *lval, int32_t value)
 void zand(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_and");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_and");
@@ -2628,9 +2853,14 @@ void zand(LVALUE* lval)
     }
 }
 
-void zand_const(LVALUE *lval, int32_t value)
+void zand_const(LVALUE *lval, int64_t value64)
 {
-    if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
+    int32_t value = (int32_t)value64;
+    if ( lval->val_type == KIND_LONGLONG ) {
+        llpush();
+        vllongconst(value64);
+        zand(lval);
+    } else if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( value == 0 ) {
             vlongconst(0);
         } else if ( value == 0xff ) {  // 5
@@ -2719,6 +2949,13 @@ void zand_const(LVALUE *lval, int32_t value)
 void asr(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        if (ulvalue(lval))
+            callrts("l_i64_asr_u");
+        else
+            callrts("l_i64_asr");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if (ulvalue(lval))
@@ -2735,8 +2972,9 @@ void asr(LVALUE* lval)
     }
 }
 
-void asr_const(LVALUE *lval, int32_t value)
+void asr_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_CHAR && ulvalue(lval) ) {
         int i;
         if ( value == 0 ) {
@@ -2973,9 +3211,27 @@ void asr_const(LVALUE *lval, int32_t value)
                 asr(lval);
             }
         }
+    } else if ( lval->val_type == KIND_LONGLONG ) {
+        if ( value >= 64 ) warningfmt("overflow","Left shifting by more than the size of the object");
+        llpush();
+        loada(value & 63);
+        if (ulvalue(lval)) {
+            callrts("l_i64_asr_uo");
+        } else {
+            callrts("l_i64_asro");
+        }
+        Zsp += 8;
     } else {
         if ( value == 1 && IS_8085() && !ulvalue(lval) ) {
             ol("sra\thl");
+        } else if ( value == 1 && IS_808x() && ulvalue(lval) ) {
+            ol("xor\ta");
+            ol("ld\ta,h");
+            ol("rra");
+            ol("ld\th,a");
+            ol("ld\ta,l");
+            ol("rra");
+            ol("ld\tl,a");
         } else if ( value == 1  && !IS_808x() ) { /* 4 bytes, 16T */
             if ( ulvalue(lval) ) {
                 ol("srl\th");
@@ -3028,6 +3284,10 @@ void asr_const(LVALUE *lval, int32_t value)
 void asl(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_asl");
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_asl");
@@ -3149,8 +3409,9 @@ void asl_16bit_const(LVALUE *lval, int value)
     }
 }
 
-void asl_const(LVALUE *lval, int32_t value)
+void asl_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR  ) { 
         switch ( value ) {
         case 0: 
@@ -3234,6 +3495,12 @@ void asl_const(LVALUE *lval, int32_t value)
             }
             break;
         }
+    } else if ( lval->val_type == KIND_LONGLONG ) {
+        if ( value >= 64 ) warningfmt("overflow","Left shifting by more than the size of the object");
+        llpush();
+        loada(value & 63);
+        callrts("l_i64_aslo");
+        Zsp += 8;
     } else {
         asl_16bit_const(lval, value);
     }
@@ -3257,6 +3524,11 @@ void lneg(LVALUE* lval)
 {
     lval->oldval_kind = lval->val_type;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_lneg");
+        lval->val_type = KIND_INT;
+        lval->ltype = type_int;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         lval->val_type = KIND_INT;
@@ -3268,7 +3540,8 @@ void lneg(LVALUE* lval)
         ol("ccf");
         break;
     case KIND_DOUBLE:
-        zconvert_from_double(KIND_INT, 0);
+    case KIND_FLOAT16:
+        zconvert_from_double(lval->val_type,KIND_INT, 0);
     default:
         set_int(lval);
         callrts("l_lneg");
@@ -3279,9 +3552,17 @@ void lneg(LVALUE* lval)
 void neg(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_neg");
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_neg");
+        break;
+    case KIND_FLOAT16:
+        ol("ld\ta,h");
+        ol("xor\t128");
+        ol("ld\th,a");
         break;
     case KIND_DOUBLE:
         switch ( c_maths_mode ) {
@@ -3290,18 +3571,13 @@ void neg(LVALUE* lval)
            ol("xor\t128");
            ol("ld\td,a");
            break;
-        case MATHS_IEEE16:
-           ol("ld\ta,h");
-           ol("xor\t128");
-           ol("ld\th,a");
-           break;
         case MATHS_MBFS:
            ol("ld\ta,e");
            ol("xor\t128");
            ol("ld\te,a");
            break;
         default:
-            callrts("fnegate");
+            dcallrts("fnegate",KIND_DOUBLE);
         }
         break;
     default:
@@ -3313,6 +3589,9 @@ void neg(LVALUE* lval)
 void com(LVALUE* lval)
 {
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_com");
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         callrts("l_long_com");
@@ -3332,22 +3611,31 @@ void inc(LVALUE* lval)
     switch (lval->val_type) {
     case KIND_DOUBLE:
         // FA = value to be incremented
-        dpush();
+        gen_push_float(lval->val_type);
         switch ( c_maths_mode ) {
         case MATHS_IEEE:
             vlongconst(0x3f800000); // +1.0
             break;
-        case MATHS_IEEE16:
-            vconst(0x3c00); // +1.0
-            break;
         case MATHS_MBFS:
             vlongconst(0x81000000); // +1.0
             break;
+        case MATHS_AM9511:
+            vlongconst(0x01800000); // +1.0
+            break;
         default:
-            zconvert_constant_to_double(1, 1);
+            gen_load_constant_as_float(1, KIND_DOUBLE, 1);
         }
-        callrts("fadd");
+        dcallrts("fadd",KIND_DOUBLE);
         Zsp += c_fp_size;
+        break;
+    case KIND_FLOAT16:
+        gen_push_float(lval->val_type);
+        vconst(0x3c00); // +1.0
+        dcallrts("fadd",KIND_FLOAT16);
+        Zsp += 2;
+        break;
+    case KIND_LONGLONG:
+        callrts("l_i64_inc");
         break;
     case KIND_LONG:
     case KIND_CPTR:
@@ -3367,22 +3655,31 @@ void dec(LVALUE* lval)
     switch (lval->val_type) {
     case KIND_DOUBLE:
         // FA = value to be incremented
-        dpush();
+        gen_push_float(lval->val_type);
         switch ( c_maths_mode ) {
         case MATHS_IEEE:
             vlongconst(0xbf800000); // -1.0
             break;
-        case MATHS_IEEE16:
-            vconst(0xbc00); // -1.0
-            break;
         case MATHS_MBFS:
             vlongconst(0x81800000); // -1.0
             break;
+        case MATHS_AM9511:
+            vlongconst(0x81800000); // -1.0
+            break;
         default:
-            zconvert_constant_to_double(-1,0);
+            gen_load_constant_as_float(-1,KIND_DOUBLE, 0);
         }
         callrts("fadd");
         Zsp += c_fp_size;
+        break;
+    case KIND_FLOAT16:
+        gen_push_float(lval->val_type);
+        vconst(0xbc00); // -1.0
+        dcallrts("fadd",KIND_FLOAT16);
+        Zsp += 2;
+        break;
+    case KIND_LONGLONG:
+        callrts("l_i64_dec");
         break;
     case KIND_LONG:
     case KIND_CPTR:
@@ -3414,6 +3711,9 @@ void eq0(LVALUE* lval, int label)
         ol("and\ta");
         break;
 #endif
+    case KIND_LONGLONG:
+        callrts("l_i64_eq0");
+        break;
     case KIND_LONG:
         ol("ld\ta,h");
         ol("or\tl");
@@ -3434,8 +3734,9 @@ void eq0(LVALUE* lval, int label)
 
 
 
-void zeq_const(LVALUE *lval, int32_t value) 
+void zeq_const(LVALUE *lval, int64_t value64) 
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( value == 0 ) {
             if ( lval->val_type == KIND_CPTR) {
@@ -3501,6 +3802,10 @@ void zeq_const(LVALUE *lval, int32_t value)
             ol("ccf");
         }
         set_carry(lval);
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush(); 
+        vllongconst(value64);
+        zeq(lval);
     } else {
         if ( value == 0 ) {
             ol("ld\ta,h");
@@ -3534,19 +3839,29 @@ void zeq(LVALUE* lval)
     lval->oldval_kind = lval->val_type;
     lval->ptr_type = KIND_NONE;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_eq");
+        Zsp += 8;
+        set_int(lval);
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         set_int(lval);
         callrts("l_long_eq");
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("feq",lval->val_type);
+        set_int(lval);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
         set_int(lval);
-        callrts("feq");
+        dcallrts("feq",lval->val_type);
         Zsp += c_fp_size;
         break;
     case KIND_CHAR:
-        if (c_speed_optimisation & OPT_INT_COMPARE ) {
+        if (c_speed_optimisation & OPT_CHAR_COMPARE ) {
             set_carry(lval);
             ol("ld\ta,l");
             ol("sub\te");
@@ -3574,8 +3889,9 @@ void zeq(LVALUE* lval)
     }
 }
 
-void zne_const(LVALUE *lval, int32_t value) 
+void zne_const(LVALUE *lval, int64_t value64) 
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( value == 0 ) {
             if ( lval->val_type == KIND_CPTR) {
@@ -3643,6 +3959,10 @@ void zne_const(LVALUE *lval, int32_t value)
             ol("scf");
         }
         set_carry(lval);
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush(); 
+        vllongconst(value64);
+        zne(lval);
     } else {
         if ( value == 0 ) {
             ol("ld\ta,h");
@@ -3675,19 +3995,29 @@ void zne(LVALUE* lval)
     lval->oldval_kind = lval->val_type;
     lval->ptr_type = KIND_NONE;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        callrts("l_i64_ne");
+        Zsp += 8;
+        set_int(lval);
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         set_int(lval);
         callrts("l_long_ne");
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fne",lval->val_type);
+        set_int(lval);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fne");
+        dcallrts("fne",lval->val_type);
         set_int(lval);            
         Zsp += c_fp_size;
         break;
     case KIND_CHAR:
-        if (c_speed_optimisation & OPT_INT_COMPARE ) {
+        if (c_speed_optimisation & OPT_CHAR_COMPARE ) {
             set_carry(lval);
             ol("ld\ta,l");
             ol("sub\te");
@@ -3716,8 +4046,9 @@ void zne(LVALUE* lval)
 }
 
 
-void zlt_const(LVALUE *lval, int32_t value)
+void zlt_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( value == 0 ) {
             if ( ulvalue(lval) ) {
@@ -3804,6 +4135,10 @@ void zlt_const(LVALUE *lval, int32_t value)
                 set_carry(lval);
             }
         }
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush();
+        vllongconst(value64);
+        zlt(lval);
     } else {
         const2(value & 0xffff);  // 7 bytes
         swap();
@@ -3817,6 +4152,14 @@ void zlt(LVALUE* lval)
     lval->oldval_kind = lval->val_type;
     lval->ptr_type = KIND_NONE;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        if (ulvalue(lval))
+            callrts("l_i64_ult");
+        else
+            callrts("l_i64_lt");
+        set_int(lval);
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if (ulvalue(lval))
@@ -3826,17 +4169,21 @@ void zlt(LVALUE* lval)
         Zsp += 4;
         set_int(lval);        
         break;
+    case KIND_FLOAT16:
+        dcallrts("flt",lval->val_type);
+        set_int(lval);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("flt");
+        dcallrts("flt",lval->val_type);
         set_int(lval);            
         Zsp += c_fp_size;
         break;
     case KIND_CHAR:
-        if (c_speed_optimisation & OPT_INT_COMPARE ) {
+        if (c_speed_optimisation & OPT_CHAR_COMPARE ) {
             if (ulvalue(lval)) {
                 ol("ld\ta,e");
                 ol("sub\tl");
-                ol("ccf");
             } else {
                 ol("ld\ta,e");
                 ol("sub\tl");
@@ -3873,8 +4220,9 @@ void zlt(LVALUE* lval)
 
 
 
-void zle_const(LVALUE *lval, int32_t value)
+void zle_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
        if ( value ==  0 && !IS_808x() ) {
             if ( lval->val_type == KIND_CPTR) {
@@ -3902,6 +4250,10 @@ void zle_const(LVALUE *lval, int32_t value)
         ol("sub\tl");
         ol("ccf");
         set_carry(lval);
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush();
+        vllongconst(value64);
+        zle(lval);
     } else {
         if ( value ==  0 && !IS_808x() ) {
             ol("ld\ta,h"); // 8 bytes
@@ -3925,6 +4277,14 @@ void zle(LVALUE* lval)
     lval->oldval_kind = lval->val_type;
     lval->ptr_type = KIND_NONE;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        if (ulvalue(lval))
+            callrts("l_i64_ule");
+        else
+            callrts("l_i64_le");
+        set_int(lval);
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if (ulvalue(lval))
@@ -3934,16 +4294,21 @@ void zle(LVALUE* lval)
         set_int(lval);            
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fle",lval->val_type);
+        set_int(lval);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fle");
+        dcallrts("fle",lval->val_type);
         set_int(lval);            
         Zsp += c_fp_size;
         break;
     case KIND_CHAR:
-        if (c_speed_optimisation & OPT_INT_COMPARE && !IS_808x() ) {
+        if (c_speed_optimisation & OPT_CHAR_COMPARE && !IS_808x()) {
             if (ulvalue(lval)) { /* unsigned */
                 ol("ld\ta,e");
-                ol("sub\tl"); /* If l < e then carry set */
+                ol("sub\tl"); /* If l < e then carry clear */
                 ol("jr\tnz,ASMPC+3"); /* If zero, then set carry */
                 ol("scf");
             } else {
@@ -3985,10 +4350,11 @@ void zle(LVALUE* lval)
     }
 }
 
-void zgt_const(LVALUE *lval, int32_t value)
+void zgt_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
-        if ( value == 0 && ulvalue(lval) && !IS_808x() ) {
+        if ( value == 0 && ulvalue(lval) ) {
             if ( lval->val_type == KIND_CPTR ) {
                 ol("ld\ta,e");
             } else {
@@ -3997,7 +4363,11 @@ void zgt_const(LVALUE *lval, int32_t value)
             }
             ol("or\th");
             ol("or\tl");
-            ol("jr\tz,ASMPC+3");
+            if ( IS_808x() ) {
+                ol("jp\tz,ASMPC+4");
+            } else {
+                ol("jr\tz,ASMPC+3");
+            }           
             ol("scf");
             set_carry(lval);
         } else {
@@ -4019,6 +4389,10 @@ void zgt_const(LVALUE *lval, int32_t value)
         }
         ol("scf");
         set_carry(lval);
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush();
+        vllongconst(value64);
+        zgt(lval);
     } else {
         const2(value & 0xffff);  // 7 bytes
         swap();
@@ -4032,6 +4406,14 @@ void zgt(LVALUE* lval)
     lval->oldval_kind = lval->val_type;
     lval->ptr_type = KIND_NONE;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        if (ulvalue(lval))
+            callrts("l_i64_ugt");
+        else
+            callrts("l_i64_gt");
+        set_int(lval);
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if (ulvalue(lval))
@@ -4041,24 +4423,28 @@ void zgt(LVALUE* lval)
         set_int(lval);            
         Zsp += 4;
         break;
+    case KIND_FLOAT16:
+        dcallrts("fgt",lval->val_type);
+        set_int(lval);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fgt");
+        dcallrts("fgt",lval->val_type);
         Zsp += c_fp_size;
         set_int(lval);
         break;
     case KIND_CHAR:
-        if (c_speed_optimisation & OPT_INT_COMPARE ) {
+        if (c_speed_optimisation & OPT_CHAR_COMPARE ) {
             if (ulvalue(lval)) {
-                ol("ld\ta,e");
-                ol("sub\tl");
+                ol("ld\ta,l");
+                ol("sub\te");
             } else {
-                ol("ld\ta,e");
-                ol("sub\tl");
+                ol("ld\ta,l");
+                ol("sub\te");
                 ol("rra");
                 ol("xor\te");
                 ol("xor\tl");
                 ol("rlca");
-                ol("ccf");
             }
             set_carry(lval);
             break;
@@ -4086,8 +4472,9 @@ void zgt(LVALUE* lval)
 }
 
 
-void zge_const(LVALUE *lval, int32_t value)
+void zge_const(LVALUE *lval, int64_t value64)
 {
+    int32_t value = (int32_t)value64;
     if ( lval->val_type == KIND_LONG || lval->val_type == KIND_CPTR) {
         if ( value == 0 ) {
             if ( ulvalue(lval) ) {
@@ -4115,6 +4502,10 @@ void zge_const(LVALUE *lval, int32_t value)
             outfmt("\tsub\t%d\n", 0x80 + ( value % 256));
             ol("ccf");
         }
+    } else if ( lval->val_type == KIND_LONGLONG) {
+        llpush();
+        vllongconst(value64);
+        zge(lval);
     } else {
         if ( value == 0 ) {
             if ( ulvalue(lval) ) {
@@ -4150,6 +4541,14 @@ void zge(LVALUE* lval)
     lval->oldval_kind = lval->val_type;
     lval->ptr_type = KIND_NONE;
     switch (lval->val_type) {
+    case KIND_LONGLONG:
+        if (ulvalue(lval))
+            callrts("l_i64_uge");
+        else
+            callrts("l_i64_ge");
+        set_int(lval);
+        Zsp += 8;
+        break;
     case KIND_LONG:
     case KIND_CPTR:
         if (ulvalue(lval))
@@ -4159,16 +4558,21 @@ void zge(LVALUE* lval)
         Zsp += 4;
         set_int(lval);        
         break;
+    case KIND_FLOAT16:
+        dcallrts("fge",lval->val_type);
+        set_int(lval);
+        Zsp += 2;
+        break;
     case KIND_DOUBLE:
-        callrts("fge");
+        dcallrts("fge",lval->val_type);
         set_int(lval);
         Zsp += c_fp_size;
         break;
     case KIND_CHAR:
-        if (c_speed_optimisation & OPT_INT_COMPARE && !IS_808x()  ) {
+        if (c_speed_optimisation & OPT_CHAR_COMPARE && !IS_808x()) {
             if (ulvalue(lval)) {
                 ol("ld\ta,l");
-                ol("sub\te"); /* If l > e, carry set */
+                ol("sub\te"); /* If e (RHS) > l, carry set */
                 ol("jr\tnz,ASMPC+3"); /* If l == e then we need to set carry */
                 ol("scf");
             } else {
@@ -4206,7 +4610,14 @@ void zge(LVALUE* lval)
     }
 }
 
-void zcarryconv(void)
+
+/*
+ *      Routines for conversion between different types, kept in this
+ *      file to aid conversion etc
+ */
+
+
+void gen_conv_carry2int(void)
 {
     vconst(0);
     if ( !IS_808x() ) {
@@ -4218,30 +4629,25 @@ void zcarryconv(void)
     }
 }
 
-/*
- *      Routines for conversion between different types, kept in this
- *      file to aid conversion etc
- */
-
-void convUint2char(void)
+void gen_conv_uint2char(void)
 {
     ol("ld\th,0");
 }
 
-void convSint2char(void)
+void gen_conv_sint2char(void)
 {
     ol("ld\ta,l");
     callrts("l_sxt");
 }
 
 /* Unsigned int to long */
-void convUint2long(void)
+void gen_conv_uint2long(void)
 {
     const2(0);
 }
 
 /* Signed int to long */
-void convSint2long(void)
+void gen_conv_sint2long(void)
 {
     // ol("ld\ta,h");
     // ol("rla");
@@ -4254,24 +4660,29 @@ void convSint2long(void)
 
 
 /* Swap double positions on stack */
-void DoubSwap(void)
+void gen_swap_float(Kind type)
 {
-    if ( c_fp_size == 2 ) {
-        swapstk(); 
+    if (type == KIND_FLOAT16) {
+        ol("ex\t(sp),hl"); 
     } else {
         callrts("fswap");
     }
 }
 
-void vlongconst(double val)
+void vlongconst(zdouble val)
 {
     uint32_t l = (uint32_t)(int64_t)val;
     vconst(l % 65536);
     const2(l / 65536);
 }
 
+void vllongconst(zdouble val)
+{
+    load_llong_into_acc(val);
+}
 
-void vlongconst_tostack(double val)
+
+void vlongconst_tostack(zdouble val)
 {
     uint32_t l = (uint32_t)(int64_t)val;
     constbc(l / 65536);
@@ -4281,11 +4692,30 @@ void vlongconst_tostack(double val)
     Zsp -= 4;
 }
 
+void vllongconst_tostack(zdouble val)
+{
+    uint64_t v,l;
+
+    v = val;
+
+    l = (v >> 32) & 0xffffffff;
+    constbc(l / 65536);
+    push("bc");
+    constbc(l % 65536);
+    push("bc");
+
+    l = v & 0xffffffff;
+    constbc(l / 65536);
+    push("bc");
+    constbc(l % 65536);
+    push("bc");
+}
+
 
 /*
  * load constant into primary register
  */
-void vconst(int32_t val)
+void vconst(int64_t val)
 {
     if (val < 0)
         val += 65536;
@@ -4327,21 +4757,7 @@ void addbchl(int val)
     }
 }
 
-/* Load accumulator with lower half of int */
 
-void LoadAccum(void)
-{
-    ol("ld\ta,l");
-}
-
-/* Compare the accumulator with a value (mod 256) */
-
-void CpCharVal(int val)
-{
-    ot("cp\t+(");
-    outdec(val);
-    outstr("% 256)\n");
-}
 
 /*
  *      Print prefix for global defintion
@@ -4358,7 +4774,7 @@ void GlobalPrefix(void)
  *  error reporting
  */
 
-void EmitLine(int line)
+void gen_emit_line(int line)
 {
     char filen[FILENAME_LEN];
     char  *ptr;
@@ -4368,32 +4784,14 @@ void EmitLine(int line)
         *ptr = 0;
     }
 
-    if (c_cline_directive || c_intermix_ccode) {
+    if ( currfn ) {
+        outfmt("\tC_LINE\t%d,\"%s::%s\"\n", line, filen,currfn->name);
+    } else {
         outfmt("\tC_LINE\t%d,\"%s\"\n", line, filen);
     }
 }
 
-/* These routines save and restore hl/de from special places */
 
-void savehl(void)
-{
-    ol("ld\t(saved_hl),hl");
-}
-
-void savede(void)
-{
-    ol("ld\t(saved_de),de");
-}
-
-void restorehl(void)
-{
-    ol("ld\thl,(saved_hl)");
-}
-
-void restorede(void)
-{
-    ol("ld\tde,(saved_de)");
-}
 
 /* Prefix for assembler */
 
@@ -4418,7 +4816,7 @@ void function_appendix(SYMBOL* func)
 {
 }
 
-void output_section(const char* section_name)
+void gen_switch_section(const char* section_name)
 {
     /* If the same section don't do anything */
     if (strcmp(section_name, current_section) == 0) {
@@ -4459,57 +4857,37 @@ void OutIndex(int val)
     outstr(")");
 }
 
-void RestoreSP(char saveaf)
-{
-    if (saveaf)
-        doexaf();
-    ot("ld\tsp,");
-    FrameP();
-    nl();
-    if (saveaf)
-        doexaf();
-}
 
-void setframe(void)
-{
-#ifdef USEFRAME
-    if (c_framepointer_is_ix == -1)
-        return;
-    ot("ld\t");
-    FrameP();
-    outstr(",0\n");
-    ot("add\t");
-    FrameP();
-    outstr(",sp\n");
-#endif
-}
 
 #endif
 
-void FrameP(void)
-{
-    outstr(c_framepointer_is_ix ? "ix" : "iy");
-}
-
-void pushframe(void)
+void gen_push_frame(void)
 {
     if (c_framepointer_is_ix != -1 || (currfn->ctype->flags & (SAVEFRAME|NAKED)) == SAVEFRAME ) {
         if ( !IS_808x() && !IS_GBZ80() ) {
             ot("push\t");
-            FrameP();
+            outstr(FRAME_REGISTER);
             nl();
+            if ( c_framepointer_is_ix != -1) {
+                ot("ld\t");
+                outstr(FRAME_REGISTER);
+                outstr(",0\n");
+                ot("add\t");
+                outstr(FRAME_REGISTER);
+                outstr(",sp\n");
+            }
         } else {
             ol("push\taf");
         }
     }
 }
 
-void popframe(void)
+void gen_pop_frame(void)
 {
     if (c_framepointer_is_ix != -1 || (currfn->ctype->flags & (SAVEFRAME|NAKED)) == SAVEFRAME ) {
         if ( !IS_808x() && !IS_GBZ80() ) {
             ot("pop\t");
-            FrameP();
+            outstr(FRAME_REGISTER);
             nl();
         } else {
             ol("pop\taf");
@@ -4610,12 +4988,12 @@ void gen_builtin_memset(int32_t c, int32_t s)
                 ol("ld\t(hl),e");
             }
         }
-    } else if ( s < 256 ) {
+    } else if ( s <= 256 ) {
         int looplabel = getlabel();
         if ( c != -1 ) {
             outstr("\tld\te,"); outdec(c % 256); nl();
         }
-        outstr("\tld\tb,"); outdec(s); nl();
+        outstr("\tld\tb,"); outdec(s % 256); nl();
         postlabel(looplabel);
         ol("ld\t(hl),e");
         ol("inc\thl");
@@ -4630,7 +5008,7 @@ void gen_builtin_memset(int32_t c, int32_t s)
         ol("ld\te,l");
         ol("inc\tde");
         outstr("\tld\tbc,"); outdec((s % 65536) - 1); nl();
-	ol("ldir");
+        ol("ldir");
     }
     ol("pop\thl");
 }
@@ -4683,7 +5061,7 @@ void copy_to_extern(const char *src, const char *dest, int size)
 }
 
 
-void intrinsic_in(SYMBOL *sym)
+void gen_intrinsic_in(SYMBOL *sym)
 {
     if ( c_cpu & CPU_RABBIT ) {
         ol("ioi");
@@ -4714,7 +5092,7 @@ void intrinsic_in(SYMBOL *sym)
     }
 }
 
-void intrinsic_out(SYMBOL *sym)
+void gen_intrinsic_out(SYMBOL *sym)
 {
     if ( c_cpu & CPU_RABBIT ) {
         ol("ld\ta,l");
@@ -4744,21 +5122,23 @@ void intrinsic_out(SYMBOL *sym)
 }
 
 
-void zentercritical(void)
+void gen_critical_enter(void)
 {
     if ( c_cpu & CPU_RABBIT ) {
         ol("ipset\t3");
     } else {
         callrts("l_push_di");
+        Zsp -= 2;
     }
 }
 
-void zleavecritical(void)
+void gen_critical_leave(void)
 {
     if ( c_cpu & CPU_RABBIT ) {
         ol("ipres");
     } else {
         callrts("l_pop_ei");
+        Zsp += 2;
     }
 }
 
@@ -4770,67 +5150,176 @@ int zcriticaloffset(void)
     return 2;
 }
 
-void push_char_sdcc_style(void)
-{
-    ol("ld\tb,l");
-    ol("push\tbc");
-    ol("inc\tsp");
-    Zsp--;
-}
 
 
-void zconvert_from_double(Kind type, unsigned char isunsigned)
+void zconvert_from_double(Kind from, Kind to, unsigned char isunsigned)
 {
-    if ( type == KIND_LONG || type == KIND_CPTR ) {
-        if ( isunsigned ) callrts("f2ulong");
-        else callrts("f2slong");
+    if ( to == KIND_LONGLONG ) {
+        if ( isunsigned ) dcallrts("f2ullong",from);
+        else dcallrts("f2sllong",from);
+    } else if ( to == KIND_LONG || to == KIND_CPTR ) {
+        if ( isunsigned ) dcallrts("f2ulong",from);
+        else dcallrts("f2slong",from);
     } else if ( isunsigned ) {
-        callrts("f2uint");
+        dcallrts("f2uint",from);
     } else {
-        callrts("f2sint");
+        dcallrts("f2sint",from);
     }
 }
 
-void zconvert_constant_to_double(double val, unsigned char isunsigned)
+void gen_load_constant_as_float(double val, Kind to, unsigned char isunsigned)
 {
     unsigned char  fa[8] = {0};
+    LVALUE lval = {0};
 
-    if ( c_fp_size == 2 ) {
-        dofloat(val, fa);
-        vconst((fa[1] << 8) | fa[0]);
+    if ( to == KIND_FLOAT16 ) {
+        lval.const_val = val;
+        lval.val_type = KIND_FLOAT16;
+        load_double_into_fa(&lval);
     } else if ( c_fp_size == 4 ) {
-        dofloat(val, fa);
+        dofloat(c_maths_mode,val, fa);
         vconst((fa[1] << 8) | fa[0]);
         const2((fa[3] << 8) | fa[2]);
     } else {
-        if ( fabs(val) < 65536 ) {
+        // Long doubles, for integer values we can load an int constant and convert, this
+        // is shorter but slower than loading the floating constant directly
+        isunsigned = val >= 0;
+        if ( val >= INT16_MIN && val <= UINT16_MAX && 
+            (c_speed_optimisation & OPT_DOUBLE_CONST) == 0 && fmod(val,1) == 0.0 ) {
             vconst(val);
-            zconvert_to_double(KIND_INT, isunsigned);
-        } else {
+            zconvert_to_double(KIND_INT,to, isunsigned);
+        } else if ( val >= INT32_MIN && val <= UINT32_MAX && 
+            (c_speed_optimisation & OPT_DOUBLE_CONST) == 0 && fmod(val,1) == 0.0) {
             vlongconst(val);
-            zconvert_to_double(KIND_LONG, isunsigned);
+            zconvert_to_double(KIND_LONG,to, isunsigned);             
+        } else {
+            lval.val_type = to;
+            lval.const_val = val;
+            load_double_into_fa(&lval);
         }
     }
+}
 
+// Convert the value that's on the stack to a double and restore stack to appropriate state
+// We have a float in the primary register
+void zconvert_stacked_to_double(Kind stacked_kind, Kind float_kind, unsigned char isunsigned, int operator_is_commutative)
+{
+    if ( float_kind == KIND_FLOAT16) {
+        if ( stacked_kind == KIND_LONG ) {
+            pop("de");      // LSW
+            ol("ex\t(sp),hl");  // hl = MSW, stack = float
+            ol("ex\tde,hl");
+            zconvert_to_double(stacked_kind, float_kind, isunsigned);
+            if (!operator_is_commutative) ol("ex\t(sp),hl"); 
+        } else if ( stacked_kind == KIND_LONGLONG) {
+            /* Pop the longlong into the accumulator */
+            ol("exx");
+            callrts("l_i64_pop");  // Preserves
+            ol("exx");
+            Zsp += 8;
+            /* Push the float */
+            push("hl");
+            /* And convert */
+            zconvert_to_double(stacked_kind, float_kind, isunsigned);
+            if (!operator_is_commutative)  ol("ex\t(sp),hl"); 
+        } else {
+            // 2 bytes on stack
+            ol("ex\t(sp),hl");  // 
+            zconvert_to_double(stacked_kind, float_kind, isunsigned);
+            if (!operator_is_commutative)  ol("ex\t(sp),hl"); 
+        }
+    } else if ( stacked_kind == KIND_LONGLONG ) {
+        /* Pop the longlong into the accumulator
+         * If we're using 4 byte longs, then they are held in dehl, so we need to preserve the register
+         * If bigger, then they are held in FA or in alt registers, so we can trash the main set
+         */
+        if ( c_fp_size < 6 ) ol("exx");
+        callrts("l_i64_pop");  // Preserves
+        if ( c_fp_size < 6 ) ol("exx");
+        Zsp += 8;
+        /* Push the float */
+        gen_push_float(float_kind); 
+        /* And convert the long */
+        zconvert_to_double(stacked_kind, float_kind, isunsigned);
+        if (!operator_is_commutative) gen_swap_float(float_kind); 
+    } else {
+        dpush_under(stacked_kind);
+        pop("hl");
+        if (stacked_kind == KIND_LONG)
+            zpop();
+        zconvert_to_double(stacked_kind, float_kind, isunsigned);
+        if (!operator_is_commutative) gen_swap_float(float_kind); 
+    }
 }
 
 
-void zconvert_to_double(Kind type, unsigned char isunsigned)
+void zconvert_to_double(Kind from, Kind to, unsigned char isunsigned)
 {
-   if ( type == KIND_LONG || type == KIND_CPTR ) {
-       if ( isunsigned ) callrts("ulong2f");
-       else callrts("slong2f");
+   if ( from == to ) {
        return;
-   } else if ( type == KIND_CHAR ) {
-       if ( isunsigned ) callrts("uchar2f");
-       else callrts("schar2f");
+   } else if ( from == KIND_LONGLONG ) {
+       if ( isunsigned ) dcallrts("ullong2f",to);
+       else dcallrts("sllong2f",to);
+       return;  
+   } else if ( from == KIND_LONG || from == KIND_CPTR ) {
+       if ( isunsigned ) dcallrts("ulong2f",to);
+       else dcallrts("slong2f",to);
        return;
-   } else if ( type == KIND_CARRY ) {
-       zcarryconv();
+   } else if ( from == KIND_CHAR ) {
+       if ( isunsigned ) dcallrts("uchar2f",to);
+       else dcallrts("schar2f",to);
+       return;
+   } else if ( from == KIND_CARRY ) {
+       gen_conv_carry2int();
        isunsigned = 1;
+   } else if ( from == KIND_FLOAT16 ) {
+       dcallrts("f16tof",to);
+       return;
+   } else if ( from == KIND_DOUBLE ) {
+       dcallrts("ftof16", from);
+       return;
    }
-   if ( isunsigned ) callrts("uint2f");
-   else callrts("sint2f");
+   if ( isunsigned ) dcallrts("uint2f",to);
+   else dcallrts("sint2f",to);
+}
+
+void zconvert_to_llong(unsigned char tounsigned, Kind from, unsigned char fromunsigned) {
+    if (tounsigned == NO && fromunsigned == NO) {
+        if (from == KIND_LONG) callrts("l_i64_slong2i64");
+        else callrts("l_i64_sint2i64");
+    } else {
+        if (from == KIND_LONG) callrts("l_i64_ulong2i64");
+        else callrts("l_i64_uint2i64");
+    }
+}
+
+void zwiden_stack_to_llong(LVALUE *lval)
+{
+    // We have a value in _i64_acc already
+    pop("hl");
+    push("hl");
+    if ( lval->ltype->isunsigned ) {
+        vconst(0);
+    } else {
+        ol("ld\ta,h");
+        ol("rlca");
+        ol("sbc\ta");
+        ol("ld\tl,a");
+        ol("ld\th,a");
+    }
+    push("hl");
+    push("hl");
+    if ( lval->val_type != KIND_LONG ) {
+       push("hl"); 
+    }
+}
+
+void zconvert_to_long(unsigned char tounsigned, Kind from, unsigned char fromunsigned) {
+    if (tounsigned == NO && fromunsigned == NO) {
+        gen_conv_sint2long();
+    } else {
+        gen_conv_uint2long();
+    }
 }
 
 void zwiden_stack_to_long(LVALUE *lval)
@@ -4849,15 +5338,72 @@ void zwiden_stack_to_long(LVALUE *lval)
         ol("dec\thl");
         ol("ex\t(sp),hl"); // Emulated on GBZ80 unfortunately
         postlabel(label);
-        zpush();
+        push("hl");
         ol("ld\tl,c");
         ol("ld\th,b");
     } else {
-        doexx(); /* Preserve other operator */
-        mainpop();
+        ol("exx"); /* Preserve other operator */
+        pop("hl");
         force(KIND_LONG, lval->val_type, lval->ltype->isunsigned, lval->ltype->isunsigned, 0);
         lpush(); /* Put the new expansion on stk*/
-        doexx(); /* Get it back again */
+        ol("exx"); /* Get it back again */
+    }
+}
+
+void gen_switch_preamble(Kind kind) 
+{
+    if ( kind == KIND_CHAR ) {
+        ol("ld\ta,l");
+    } else if (kind == KIND_LONGLONG) {
+        callrts("l_i64_case");
+    } else if (kind == KIND_LONG || kind == KIND_CPTR) {
+        callrts("l_long_case");
+    } else {
+        callrts("l_case");
+    }
+}
+
+void gen_switch_case(Kind kind, int64_t value, int label) 
+{
+    if ( kind == KIND_CHAR ) {
+        if ( value == 0 ) {
+            ol("and\ta");
+        } else {
+            ot("cp\t+(");
+            outdec(value);
+            outstr("% 256)\n");
+        }
+        opjump("z,", label);
+    } else {
+        defword();
+        printlabel(label); /* case label */
+        nl();
+        if ( kind == KIND_LONGLONG ) {
+            uint64_t l;
+            l = value & 0xffffffff;
+            outfmt("\tdefb\t$%02x,$%02x,$%02x,$%02x\n", (l % 65536 ) % 256, (l % 65536 ) / 256, (l / 65536) % 256, (l / 65536) / 256 );
+            l = (value >> 32) & 0xffffffff;
+            outfmt("\tdefb\t$%02x,$%02x,$%02x,$%02x\n", (l % 65536 ) % 256, (l % 65536 ) / 256, (l / 65536) % 256, (l / 65536) / 256 );
+        } else {
+            if ( kind == KIND_LONG || kind == KIND_CPTR) {
+                deflong();
+            } else {
+                defword();
+            }
+            outdec(value); /* case value */
+            nl();
+        }
+    }
+}
+
+void gen_switch_postamble(Kind kind)
+{
+    // Table terminator
+
+    if ( kind != KIND_CHAR ) {
+        defword();
+        outdec(0);
+        nl();
     }
 }
 

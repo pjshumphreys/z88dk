@@ -5,66 +5,29 @@
 #include <sys/types.h>
 #include <limits.h>
 
+#define FLT_ROUNDS          1
+#define FLT_RADIX           2
 
-#define HUGE_POS_F      (float)+3.4028234664E+38
-#define TINY_POS_F      (float)+1.1754943508E−38
-#define HUGE_NEG_F      (float)-1.7014118346E+38
-#define TINY_NEG_F      (float)-1.1754943508E-38
+#define FLT_MANT_DIG        23
+#define DBL_MANT_DIG        23
+#define FLT_DIG             7
+#define DBL_DIG             7
 
-#define MAXL2_F         ((float)+127.999999914)
-#define MINL2_F         ((float)-126.0)
-#define MAXLOG_F        ((float)+88.722839052)
-#define MINLOG_F        ((float)−87.336544751)
-#define MAXL10_F        ((float)+38.230809449)
-#define MINL10_F        ((float)−37.929779454)
+#define HUGE_POS_F32        (+3.4028234664e+38)
+#define TINY_POS_F32        (+1.1754943508e-38)
+#define HUGE_NEG_F32        (-1.7014118346e+38)
+#define TINY_NEG_F32        (-1.1754943508e-38)
 
-#define INFINITY_POS_F  ((unsigned long)0x7F800000)
-#define INFINITY_NEG_F  ((unsigned long)0xFF800000)
+#define MAXL2_F32           (+127.999999914)
+#define MINL2_F32           (-126.0)
+#define MAXLOG_F32          (+88.722839052)
+#define MINLOG_F32          (−87.336544751)
+#define MAXL10_F32          (+38.230809449)
+#define MINL10_F32          (−37.929779454)
 
-#define PI          3.1415926536
-#define TWO_PI      6.2831853071
-#define HALF_PI     1.5707963268
-#define QUART_PI    0.7853981634
-#define iPI         0.3183098862
-#define iTWO_PI     0.1591549431
-#define TWO_O_PI    0.6366197724
-
-
-// Non-ANSI macros
-#define BADTAN          (double_t)1.560796327
-#define EXPLARGE        (double_t)89.80081863
-#define INF             (double_t)3.00e38
-#define IPIby180        (double_t)57.29577951
-#define LNof10          (double_t)2.302585093
-#define LOG2            (double_t)0.30102999567
-#define LOGE            (double_t)0.43429448190
-#define PIby180         (double_t)0.0174532925
-#define PIbyTWO         (double_t)1.570796326795
-#define POW10INF        (double_t)38.0
-#define SQR10           (double_t)3.162277660168
-#define TWObyPI         (double_t)0.63661977
-
-#define M_E        2.718282
-#define M_INVLN2   1.442694  /* 1 / log(2) */
-#define M_LOG2E    1.442694
-#define M_IVLN10   0.434294  /* 1 / log(10) */
-#define M_LOG10E   0.434294
-#define M_LOG2_E   0.693146
-#define M_LN2      0.693146
-#define M_LN10     2.302585
-#define M_PI       3.141592
-#define M_TWOPI    6.283184
-#define M_PI_2     1.570796
-#define M_PI_4     0.785396
-#define M_3PI_4    2.356194
-#define M_SQRTPI   1.772454
-#define M_1_PI     0.318310
-#define M_2_PI     0.636620
-#define M_1_SQRTPI 0.564190
-#define M_2_SQRTPI 1.128379
-#define M_SQRT2    1.414214
-#define M_SQRT3    1.732051
-#define M_SQRT1_2  0.707107
+#define HUGE_VAL_F32        ((unsigned long)0x7F800000)
+#define INFINITY_POS_F32    ((unsigned long)0x7F800000)
+#define INFINITY_NEG_F32    ((unsigned long)0xFF800000)
 
 
 /* Trigonometric functions */
@@ -85,8 +48,11 @@ extern double_t __LIB__ acosh(double_t x);
 extern double_t __LIB__ atanh(double_t x);
 
 /* Power functions */
-extern double_t __LIB__ pow(double_t x, double_t y) __smallc;
+extern double_t __LIB__ sqr(double_t a);
 extern double_t __LIB__ sqrt(double_t a);
+extern double_t __LIB__ inv(double_t a);
+extern double_t __LIB__ invsqrt(double_t a);
+extern double_t __LIB__ pow(double_t x, double_t y) __smallc;
 
 /* Exponential */
 extern double_t __LIB__ exp(double_t x);
@@ -107,15 +73,13 @@ extern double_t __LIB__ round(double_t x);
 #define rint(a) ceil(a)
 
 /* Manipulation */
+extern double_t __LIB__ div2(double_t x);
+extern double_t __LIB__ mul2(double_t x);
+extern double_t __LIB__ mul10u(double_t x);
 extern double_t __LIB__ ldexp(double_t x, int pw2) __smallc;
 #define scalbn(x,pw2) ldexp(x,pw2)
 extern double_t __LIB__ modf(double_t x, double_t * y) __smallc;
 extern double_t __LIB__ frexp(double_t x, int *pw2) __smallc;
-
-/* Intrinsic functions */
-extern double_t __LIB__ sqr(double_t a);
-extern double_t __LIB__ inv(double_t a);
-extern double_t __LIB__ invsqrt(double_t a);
 
 /* General */
 extern double_t __LIB__ fabs(double_t x);
@@ -126,7 +90,6 @@ extern double_t __LIB__ hypot(double_t x, double_t y) __smallc;
 extern double_t __LIB__ atof(char *) __smallc;
 extern void __LIB__ ftoa(double_t, int, char *) __smallc;
 extern void __LIB__ ftoe(double_t, int, char *) __smallc;
-
 
 /* Classification functions */
 #define FP_NORMAL   0

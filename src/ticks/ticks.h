@@ -32,17 +32,6 @@ struct symbol_s {
 };
 
 
-typedef struct {
-    int             line;
-    int             address;
-    UT_hash_handle hh;
-} cline;
-
-typedef struct {
-    char          *file;
-    cline         *lines;
-    UT_hash_handle hh;
-} cfile;
 
 extern unsigned char a,b,c,d,e,h,l;
 extern unsigned char a_,b_,c_,d_,e_,h_,l_;
@@ -71,6 +60,8 @@ extern int c_cpu;
 extern int trace;
 extern int debugger_active;
 extern int rom_size;		/* amount of memory in low addresses that is read-only */
+extern int ioport;
+extern int rc2014_mode;
 
 /* Break down flags */
 extern int f(void);
@@ -124,16 +115,19 @@ extern void      hook_io_init(hook_command *cmds);
 extern void      hook_io_set_ide_device(int unit, const char *file);
 extern void      hook_misc_init(hook_command *cmds);
 extern void      hook_cpm(void);
+extern void      hook_rc2014(void);
 extern void      hook_console_init(hook_command *cmds);
 extern void      debugger_init();
 extern void      debugger();
-extern int       disassemble(int pc, char *buf, size_t buflen);
-extern int       disassemble2(int pc, char *buf, size_t buflen);
+extern void      debugger_write_memory(int addr, uint8_t val);
+extern void      debugger_read_memory(int addr);
+extern int       disassemble2(int pc, char *buf, size_t buflen, int compact);
 extern void      read_symbol_file(char *filename);
 extern const char     *find_symbol(int addr, symboltype preferred_symtype);
 extern symbol   *find_symbol_byname(const char *name);
 extern int symbol_resolve(char *name);
 extern char **parse_words(char *line, int *argc);
+extern int symbol_find_lower(int addr, symboltype preferred_type, char *buf, size_t buflen);
 
 extern void memory_init(char *model);
 extern void memory_handle_paging(int port, int value);
@@ -144,7 +138,41 @@ extern void        out(int port, int value);
 
 
 extern uint8_t    *get_memory_addr(int pc);
+
 extern uint8_t     get_memory(int pc);
 extern uint8_t     put_memory(int pc, uint8_t b);
+
+// acia
+extern int acia_out(int port, int value);
+extern int acia_in(int port);
+
+// am9511
+extern int apu_out(int port, int value);
+extern int apu_in(int port);
+extern void apu_reset(void);
+extern uint8_t apu_read_status(void);
+extern uint8_t apu_read_data();
+extern void apu_write_data(uint8_t data);
+extern void apu_write_command(uint8_t cmd);
+
+extern int hook_console_out(int port, int value);
+extern int hook_console_in(int port);
+
+// srcfile
+extern void srcfile_display(const char *filename, int start_line, int count, int highlight);
+
+
+// debug
+extern void debug_add_info_encoded(char *encoded);
+extern int debug_find_source_location(int address, const char **filename, int *lineno);
+extern void debug_add_cline(const char *filename, int lineno, const char *address);
+extern int debug_resolve_source(char *name);
+
+#ifndef WIN32
+extern int kbhit();
+extern int getch();
+#else
+#include <conio.h>
+#endif
 
 #endif

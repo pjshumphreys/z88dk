@@ -4,7 +4,7 @@
  *
  *  27/1/2002 - djm
  *
- *  $Id: parsefcb.c,v 1.3 2013-06-06 08:58:32 stefano Exp $
+ *  $Id: parsefcb.c,   stefano Exp 4/11/2020 $
  */
 
 
@@ -100,6 +100,10 @@ void parsefcb(struct fcb *fc, unsigned char *name)
 ;
 
 
+EXTERN asm_toupper
+EXTERN asm_isdigit
+
+
 vstfcu:
 
 	pop bc			; ret addr
@@ -116,7 +120,7 @@ vstfcu:
  PUSH	BC	;save BC
 	PUSH	HL		;save fcb pointer
 	call	igwsp	;ignore blanks and tabs	
-	call	isdec	;decimal digit?
+	call	asm_isdigit	 ;decimal digit?
 	JP	NC,setfc2	;if so, go process
 
 setfc0:
@@ -163,7 +167,7 @@ setfc3:
 	LD 	b,a	;put sum in B
 	INC	DE	;look at next char in text
 	LD	A,(DE)	;is it a digit?	
-	call	isdec
+	call	asm_isdigit
 	JP	NC,setfc3	;if so, go on looping and summing digits
 	CP	'/'	;make sure number is terminated by a slash
 	JP	Z,setfc4
@@ -195,7 +199,7 @@ vsetfcb:
 	LD 	a,0	; (for currently logged disk)
 	JP	NZ,setf1
 	LD	A,(DE)	;oh oh...we have a disk designator
-	call	mapuc	;make it upper case
+	call	asm_toupper	 ;make it upper case
 	SUB	'A'-1	;and fudge it a bit
 	INC	DE	;advance DE past disk designator to filename
 	INC	DE
@@ -258,6 +262,7 @@ setnm3:
 	INC	DE
 	JP	setnm3
 
+
 pad:
 	LD 	a,' '	;pad with B blanks
 pad2:
@@ -269,15 +274,12 @@ pad2:
 	ret
 
 
-
-
-
 ;
 ; Test if char in A is legal character to be in a filename:
 ;
 
 legfc:
-	call	mapuc
+	call	asm_toupper
 	CP	'.'	; '.' is illegal in a filename or extension
 	SCF
 	RET	Z
@@ -290,17 +292,6 @@ legfc:
 	CP	'!'	;if less than exclamation pt, not legal char
 	ret		;else good enough
 
-;
-; Map character in A to upper case if it is lower case:
-;
-
-mapuc:
-	CP	'a'
-	RET	C
-	CP	'z'+1
-	RET	NC
-	SUB	32	;if lower case, map to upper
-	ret
 
 ;
 ; Ignore blanks and tabs at text pointed to by DE:
@@ -317,16 +308,6 @@ igwsp1:
 	JP	Z,igwsp1
 	ret
 
-;
-; Return Cy if char in A is not a decimal digit:
-;
-
-isdec:
-	CP	'0'
-	RET	C
-	CP	'9'+1
-	CCF
-	ret
 
 #endasm
 

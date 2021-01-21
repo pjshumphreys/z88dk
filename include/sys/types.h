@@ -27,9 +27,12 @@ typedef double double_t;
 #endif
 #endif
 
-#ifndef _HALF_FLOAT_T
-#define _HALF_FLOAT_T
-typedef short half_t;           /* IEEE16 half float type */
+#ifndef _FLOAT16_T
+#define _FLOAT16_T
+#ifndef __SCCZ80
+typedef short _Float16;            /* IEEE-754 half float type */
+#endif
+typedef _Float16 half_t;
 #endif
 
 #ifndef _SIZE_T
@@ -109,6 +112,9 @@ typedef long           i32_t;      /* 32 bit signed type */
 #define _PROTOTYPE(x,y) x y
 #endif
 
+#ifndef NULL
+#define NULL ((void *)0)
+#endif
 
 
 #endif /* _TYPES_H */

@@ -1,10 +1,12 @@
 	SECTION code_clib
-	PUBLIC	gotoxy
-	PUBLIC	_gotoxy
+	PUBLIC	gotoxy_sms
+	PUBLIC	_gotoxy_sms
 	
 	INCLUDE "target/sms/sms.hdr"
 
 	EXTERN	fputc_vdp_offs
+	EXTERN	CONSOLE_YOFFSET
+	EXTERN	CONSOLE_XOFFSET
 	
 ;==============================================================
 ; void gotoxy(int x, int y)
@@ -12,15 +14,18 @@
 ; Places the software text cursor in the specified coordinates.
 ; Supposed to be used in conjunction with stdio
 ;==============================================================
-.gotoxy
-._gotoxy
+.gotoxy_sms
+._gotoxy_sms
 	ld	hl, 2
 	add	hl, sp
-	ld	d, (hl)		; Y
+	ld	a,CONSOLE_YOFFSET
+	add	(hl)
+	ld	d,a	;Y
 	inc	hl
 	inc 	hl
-	ld	e, (hl)		; X
-
+	ld	a,CONSOLE_XOFFSET
+	add	(hl)
+	ld	e,a	;X
 	ld	l, d
 	ld	h, 0
 	add	hl, hl

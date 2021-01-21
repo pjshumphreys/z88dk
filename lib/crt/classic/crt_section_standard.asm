@@ -40,6 +40,8 @@
 		SECTION code_fp_math16
 		SECTION code_fp_mbf32
 		SECTION code_fp_mbf64
+		SECTION code_fp_am9511
+		SECTION code_fp_dai32
 		SECTION code_math
 		SECTION code_error
 		SECTION code_stdlib
@@ -68,15 +70,20 @@
 		SECTION	code_font_fzx
 		SECTION	code_psg
 		SECTION	code_sound_ay
+		SECTION	code_PSGlib
 		SECTION	code_z80
 IF !__crt_org_graphics
 		SECTION code_graphics
 ENDIF
 		SECTION code_user
 		SECTION rodata_fp
+		SECTION rodata_fp_math48
 		SECTION rodata_fp_math32
+		SECTION rodata_fp_math16
 		SECTION rodata_fp_mbf32
 		SECTION rodata_fp_mbf64
+		SECTION rodata_fp_am9511
+		SECTION rodata_fp_dai32
 		SECTION rodata_arch
 		SECTION rodata_compiler
 		SECTION rodata_clib
@@ -95,6 +102,7 @@ IF !__crt_model
 		SECTION DATA
 		SECTION smc_clib
 		SECTION smc_user
+                SECTION data_driver
 		SECTION data_clib
 		SECTION data_stdlib
 		SECTION data_psg
@@ -117,8 +125,11 @@ IF __crt_org_bss
 ENDIF
 		SECTION bss_fp
 		SECTION bss_fp_math32
+		SECTION bss_fp_math16
 		SECTION bss_fp_mbf32
 		SECTION bss_fp_mbf64
+		SECTION bss_fp_am9511
+		SECTION bss_fp_dai32
 		SECTION bss_compress_aplib
 		SECTION bss_error
 		SECTION bss_crt
@@ -140,6 +151,7 @@ IF !__crt_org_graphics
 ENDIF
 		SECTION bss_psg
 		SECTION bss_sound_ay
+		SECTION	bss_PSGlib
 		SECTION bss_user
 IF __crt_model > 0
         	SECTION DATA
@@ -148,12 +160,14 @@ IF __crt_model > 0
 		SECTION smc_clib
 		SECTION smc_fp
 		SECTION smc_user
-		SECTION data_clib
+                SECTION data_driver
 		SECTION data_crt
+		SECTION data_clib
 		SECTION data_arch
 		SECTION data_stdlib
 		SECTION data_psg
 		SECTION data_sound_ay
+		SECTION	data_PSGlib
 IF !__crt_org_graphics
 		SECTION data_graphics
 ENDIF
@@ -177,6 +191,10 @@ IF __crt_org_graphics
 		SECTION bss_himem
 		SECTION HIMEM_END
 ENDIF
+
+		SECTION __DEBUG
+		org	0
+		SECTION	__ADBDEBUG
 
 IF CRT_APPEND_MMAP
 		INCLUDE "./mmap.inc"

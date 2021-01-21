@@ -196,11 +196,7 @@ int zx_exec(char *target)
     if (tap && (zxc.main_fence > 0))
         fprintf(stderr, "Warning: Main-fence is ignored for tap compiles\n");
 
-    if (tap)
-        return zx_tape(&zxc, &zxt);
 
-    if (plus3)
-        return zx_plus3(&zxc, &zxt);
 
     // output formats below need banked memory model
 
@@ -242,12 +238,10 @@ int zx_exec(char *target)
     snprintf(filename, sizeof(filename) - 4, "%s", zxc.crtfile);
     suffix_change(filename, ".map");
 
-    if ((fmap = fopen(filename, "r")) == NULL)
-        exit_log(1, "Error: Cannot open map file %s\n", filename);
-
-    mb_enumerate_banks(fmap, zxc.binname, &memory, &aligned);
-
-    fclose(fmap);
+    if ((fmap = fopen(filename, "r")) != NULL) {
+        mb_enumerate_banks(fmap, zxc.binname, &memory, &aligned);
+        fclose(fmap);
+    }
 
     // exclude unwanted banks
 
@@ -473,6 +467,14 @@ int zx_exec(char *target)
     }
 
     // now the output formats
+    if (tap) {   
+        return zx_tape(&zxc, &zxt, &memory);
+    }
+
+
+
+    if (plus3)
+        return zx_plus3(&zxc, &zxt, &memory);
 
     if (dot)
     {

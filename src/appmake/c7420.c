@@ -58,24 +58,22 @@ int c7420_exec(char* target)
     }
 
     if (strcmp(binname, filename) == 0) {
-        fprintf(stderr, "Input and output file names must be different\n");
-        myexit(NULL, 1);
+        exit_log(1,"Input and output file names must be different\n");
     }
 
     if (blockname == NULL)
-        blockname = binname;
+        blockname = zbasename(binname);
 
     if (origin != -1) {
         pos = origin;
     } else {
         if ((pos = get_org_addr(crtfile)) == -1) {
-            myexit("Could not find parameter ZORG (not z88dk compiled?)\n", 1);
+            exit_log(1,"Could not find parameter ZORG (not z88dk compiled?)\n");
         }
     }
 
     if ((fpin = fopen_bin(binname, crtfile)) == NULL) {
-        printf("Can't open input file %s\n", binname);
-        exit(1);
+        exit_log(1,"Can't open input file %s\n", binname);
     }
 
     /*

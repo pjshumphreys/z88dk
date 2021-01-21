@@ -1,5 +1,6 @@
 	SECTION code_clib
 	
+IF !__CPU_INTEL__ & !__CPU_RABBIT__ & !__CPU_GBZ80__
 	PUBLIC	set_sound_volume
 	PUBLIC	_set_sound_volume
 	PUBLIC	psg_volume
@@ -13,7 +14,7 @@
 ; Sets the sound volume for a given channel
 ;==============================================================
 
-	INCLUDE	"psg/sn76489.inc"
+	INCLUDE	"sn76489.inc"
 
 .set_sound_volume
 ._set_sound_volume
@@ -41,10 +42,14 @@
 	or	a, $90
 	or	a, b		; Prepares the first byte of the command
 IF HAVE16bitbus
-        ld      bc,psgport
-        out     (c),a
+    ld      bc,psgport
+    out     (c),a
 ELSE
-	out	(psgport), a	; Sends it
+    out	(psgport), a	; Sends it
+IF PSGLatchPort
+    in a,(PSGLatchPort)
+ENDIF
 ENDIF
 
 	ret
+ENDIF

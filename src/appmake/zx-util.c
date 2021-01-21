@@ -198,7 +198,7 @@ void turbo_rawout(FILE *fpout, unsigned char b, char extreme)
 }
 
 
-int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
+int zx_tape(struct zx_common *zxc, struct zx_tape *zxt, struct banked_memory *memory)
 {
     char    filename[FILENAME_MAX + 1];
     char    wavfile[FILENAME_MAX + 1];
@@ -210,8 +210,7 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
     int     warping;
     int     i, j, blocklen;
     int     len, mlen;
-    int		blockcount;
-
+    int		blockcount, bsnum_bank;
     unsigned char * loader;
     int		loader_len;
 
@@ -265,12 +264,11 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
         }
 
         if (zxt->blockname == NULL)
-            zxt->blockname = zxc->binname;
+            zxt->blockname = zbasename(zxc->binname);
 
 
         if (strcmp(zxc->binname, filename) == 0) {
-            fprintf(stderr, "Input and output file names must be different\n");
-            myexit(NULL, 1);
+            exit_log(1, "Input and output file names must be different\n");
         }
 
 
@@ -279,13 +277,12 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
         }
         else {
             if ((pos = get_org_addr(zxc->crtfile)) == -1) {
-                myexit("Could not find parameter ZORG (not z88dk compiled?)\n", 1);
+                exit_log(1,"Could not find parameter ZORG (not z88dk compiled?)\n");
             }
         }
 
         if ((fpin = fopen_bin(zxc->binname, zxc->crtfile)) == NULL) {
-            fprintf(stderr, "Can't open input file %s\n", zxc->binname);
-            myexit(NULL, 1);
+            exit_log(1, "Can't open input file %s\n", zxc->binname);
         }
 
         /*
@@ -293,9 +290,8 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
         *        to be converted
         */
         if (fseek(fpin, 0, SEEK_END)) {
-            fprintf(stderr, "Couldn't determine size of file\n");
             fclose(fpin);
-            myexit(NULL, 1);
+            exit_log(1, "Couldn't determine size of file\n");
         }
 
         len = ftell(fpin);
@@ -303,7 +299,7 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
 
         if ((fpout = fopen(filename, "wb")) == NULL) {
             fclose(fpin);
-            myexit("Can't open output file\n", 1);
+            exit_log(1,"Can't open output file\n");
         }
 
         if (zxt->ts2068) {
@@ -369,26 +365,23 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
                 /* If requested, merge an external loader */
                 if (zxt->merge != NULL) {
                     if (zxt->turbo) {
-                        fprintf(stderr, "ERROR: turbo mode conflicts with the 'merge' option.\n");
                         fclose(fpin);
                         fclose(fpout);
-                        myexit(NULL, 1);
+                        exit_log(1,"ERROR: turbo mode conflicts with the 'merge' option.\n");
                     }
 
                     if ((fpmerge = fopen(zxt->merge, "rb")) == NULL) {
-                        fprintf(stderr, "File for 'merge' not found: %s\n", zxt->merge);
                         fclose(fpin);
                         fclose(fpout);
-                        myexit(NULL, 1);
+                        exit_log(1, "File for 'merge' not found: %s\n", zxt->merge);
                     }
                     /* check the header type (first block must be BASIC) */
                     fseek(fpmerge, 3, SEEK_SET);
                     c = getc(fpmerge);
                     if (c != 0) {
-                        fprintf(stderr, "BASIC block not found in file %s\n", zxt->merge);
                         fclose(fpin);
                         fclose(fpout);
-                        myexit(NULL, 1);
+                        exit_log(1, "BASIC block not found in file %s\n", zxt->merge);
                     }
 
                     fseek(fpmerge, 21, SEEK_SET);
@@ -397,10 +390,9 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
                     fseek(fpmerge, 0, SEEK_SET);
                     blocklen = getc(fpmerge) + 256 * getc(fpmerge);  /* get block length */
                     if (blocklen != 19) {
-                        fprintf(stderr, "Error locating the external loader header in file %s\n", zxt->merge);
                         fclose(fpin);
                         fclose(fpout);
-                        myexit(NULL, 1);
+                        exit_log(1, "Error locating the external loader header in file %s\n", zxt->merge);
                     }
                     fseek(fpmerge, 0, SEEK_SET);
                     /* Total ext. loader size (headerblock + data block) */
@@ -534,27 +526,24 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
             if (zxt->screen != NULL) {
 
                 if ((fpmerge = fopen(zxt->screen, "rb")) == NULL) {
-                    fprintf(stderr, "Title screen file not found: %s\n", zxt->screen);
                     fclose(fpin);
                     fclose(fpout);
-                    myexit(NULL, 1);
+                    exit_log(1,"Title screen file not found: %s\n", zxt->screen);
                 }
 
                 if (fseek(fpmerge, 0, SEEK_END)) {
-                    fprintf(stderr, "Couldn't determine size of file\n");
                     fclose(fpin);
                     fclose(fpout);
                     fclose(fpmerge);
-                    myexit(NULL, 1);
+                    exit_log(1,"Couldn't determine size of file\n");
                 }
 
                 mlen = ftell(fpmerge);
                 if (((mlen < 6912) || (mlen >= 7000)) && (mlen != 6144) && (mlen != 2048)) {
-                    fprintf(stderr, "ERROR: Title screen size not recognized: %u\n", mlen);
                     fclose(fpin);
                     fclose(fpout);
                     fclose(fpmerge);
-                    myexit(NULL, 1);
+                    exit_log(1,  "ERROR: Title screen size not recognized: %u\n", mlen);
                 }
 
                 if (mlen <= 6912) {
@@ -626,6 +615,34 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
                 writebyte_p(c, fpout, &zxt->parity);
             }
             writebyte_p(zxt->parity, fpout, &zxt->parity);
+
+            // Write the memory banks
+             // Write the banks
+            bsnum_bank = mb_find_bankspace(memory, "BANK");
+            for ( i = 0; i < 8; i++ ) {
+                struct memory_bank *mb = &memory->bankspace[bsnum_bank].membank[i];
+                if (mb->num > 0) {     
+                    int      j;              
+                    unsigned char bank_buf[16384];
+                    FILE    *fpbank = fopen(mb->secbin->filename, "rb");
+
+                    if ( fpbank == NULL ) {
+                        exit_log(1,"Cannot open BANK file %s\n", mb->secbin->filename);
+                    }
+                    if ( mb->secbin->size != fread(bank_buf, 1,  mb->secbin->size, fpbank)) {  exit_log(1, "Could not read required data from <%s>\n",mb->secbin->filename); }
+                    
+                    /* Now onto the data bit */
+                    writeword_p(mb->secbin->size + 2, fpout, &zxt->parity);      /* Length of next block */
+                    zxt->parity = 0;
+                    writebyte_p(255, fpout, &zxt->parity);        /* Data is a type 255 block */
+                    for (j = 0; j<mb->secbin->size; j++) {
+                        c = bank_buf[j];
+                        writebyte_p(c, fpout, &zxt->parity);
+                    }
+                    writebyte_p(zxt->parity, fpout, &zxt->parity);
+                    fclose(fpbank);
+                }
+            }
         }
         fclose(fpin);
         fclose(fpout);
@@ -636,13 +653,12 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
     /* ***************************************** */
     if (zxt->audio) {
         if ((fpin = fopen(filename, "rb")) == NULL) {
-            fprintf(stderr, "Can't open file %s for wave conversion\n", filename);
-            myexit(NULL, 1);
+            exit_log(1, "Can't open file %s for wave conversion\n", filename);
         }
 
         if (fseek(fpin, 0, SEEK_END)) {
             fclose(fpin);
-            myexit("Couldn't determine size of file\n", 1);
+            exit_log(1,"Couldn't determine size of file\n");
         }
         len = ftell(fpin);
         fseek(fpin, 0L, SEEK_SET);
@@ -650,8 +666,7 @@ int zx_tape(struct zx_common *zxc, struct zx_tape *zxt)
         strcpy(wavfile, filename);
         suffix_change(wavfile, ".RAW");
         if ((fpout = fopen(wavfile, "wb")) == NULL) {
-            fprintf(stderr, "Can't open output raw audio file %s\n", wavfile);
-            myexit(NULL, 1);
+            exit_log(1, "Can't open output raw audio file %s\n", wavfile);
         }
 
         blockcount = 0;
@@ -1595,7 +1610,7 @@ int zx_sna(struct zx_common *zxc, struct zx_sna *zxs, struct banked_memory *memo
     if ((fin = fopen(filename, "rb")) == NULL)
         exit_log(1, "Error: SNA prototype %s not found\n", filename);
 
-    fread(sna_state, 27, 1, fin);
+    if (1 != fread(sna_state, 27, 1, fin)) { fclose(fin); exit_log(1, "Could not read required data from <%s>\n",filename); }
 
     if (fread(mem128, 49152, 1, fin) < 1)
     {
@@ -1605,7 +1620,7 @@ int zx_sna(struct zx_common *zxc, struct zx_sna *zxs, struct banked_memory *memo
 
     if (is_128)
     {
-        fread(&sna_state[SNA_128_PC], 4, 1, fin);
+        if (1 != fread(&sna_state[SNA_128_PC], 4, 1, fin)) { fclose(fin); exit_log(1, "Could not read required data from <%s>\n",filename); }
 
         // 5,2,0 (48k) 1,3,4,6,7
 
@@ -2141,7 +2156,7 @@ uint8_t *zx3_layout_file(uint8_t *inbuf, size_t filelen, int start_address, int 
      return buf;
 }
 
-int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
+int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt, struct banked_memory *memory)
 {
     uint8_t  buffer[1024];  // Temporary buffer
     uint8_t *ptr;
@@ -2151,7 +2166,7 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
     char    tbuf[50];
     size_t  origin;
     size_t  binary_length;
-    int     len;
+    int     len, i, bsnum_bank;
     disc_handle *h;
     FILE   *fpin;
     void   *file_buf;
@@ -2166,12 +2181,11 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
 
 
     if (zxt->blockname == NULL)
-        zxt->blockname = zxc->binname;
+        zxt->blockname = zbasename(zxc->binname);
 
 
     if (strcmp(zxc->binname, disc_image_name) == 0) {
-        fprintf(stderr, "Input and output file names must be different\n");
-        myexit(NULL, 1);
+        exit_log(1, "Input and output file names must be different\n");
     }
 
 
@@ -2179,7 +2193,7 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
         origin = zxc->origin;
     } else {
         if ((origin = get_org_addr(zxc->crtfile)) == -1) {
-            myexit("Could not find parameter ZORG (not z88dk compiled?)\n", 1);
+            exit_log(1,"Could not find parameter ZORG (not z88dk compiled?)\n");
         }
     }
 
@@ -2201,7 +2215,7 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
     }
 
     // Lets do some filename mangling
-    cpm_create_filename(zxc->binname, basic_filename, 0, 1);
+    cpm_create_filename(zxt->blockname, basic_filename, 0, 1);
 
     // Create the basic file
 
@@ -2238,6 +2252,9 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
     writebyte_b(0xb0, &ptr);	/* VAL */
     snprintf(tbuf,sizeof(tbuf), "\"%i\"", (int)origin);           /* Location for USR */
     writestring_b(tbuf, &ptr);
+    writebyte_b(':', &ptr);
+    writebyte_b(234, &ptr);      /* REM */
+    writestring_b(basic_filename, &ptr);
     writebyte_b(0x0d, &ptr);	/* ENTER (end of BASIC line) */
     len = ptr - buffer;
     buffer[2] = (len-4) % 256; 
@@ -2258,7 +2275,7 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
             exit_log(1,"Cannot open SCREEN$ file %s\n", zxt->screen);
         }
         suffix_change(basic_filename, ".SCR");
-        fread(scrbuf, 1, 6912, fpscr);
+        if (6912 != fread(scrbuf, 1, 6912, fpscr)) { fclose(fpscr); exit_log(1, "Could not read required data from <%s>\n",zxt->screen); }
         fclose(fpscr);
         file_buf = zx3_layout_file(scrbuf, 6912, 16384, 3, &file_len);
         cpm_create_filename(basic_filename, cpm_filename, 0, 0);
@@ -2267,7 +2284,7 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
     }
     // Read the binary
     ptr = must_malloc(binary_length);
-    fread(ptr, 1, binary_length, fpin);
+    if (binary_length != fread(ptr, 1, binary_length, fpin)) { fclose(fpin); exit_log(1, "Could not read required data from <%s>\n",zxc->binname); }
     fclose(fpin);
 
     // And write it
@@ -2277,6 +2294,30 @@ int zx_plus3(struct zx_common *zxc, struct zx_tape *zxt)
     disc_write_file(h, cpm_filename, file_buf, file_len);
     free(file_buf);
     free(ptr);
+
+    // Write the banks
+    bsnum_bank = mb_find_bankspace(memory, "BANK");
+    for ( i = 0; i < 8; i++ ) {
+        struct memory_bank *mb = &memory->bankspace[bsnum_bank].membank[i];
+        if (mb->num > 0) {
+            unsigned char bank_buf[16384];
+            char          numbuf[32];
+            FILE    *fpbank = fopen(mb->secbin->filename, "rb");
+
+            if ( fpbank == NULL ) {
+                exit_log(1,"Cannot open BANK file %s\n", mb->secbin->filename);
+            }
+            if ( mb->secbin->size != fread(bank_buf, 1,  mb->secbin->size, fpbank)) {  exit_log(1, "Could not read required data from <%s>\n",mb->secbin->filename); }
+            snprintf(numbuf,sizeof(numbuf),".%d",i);
+            suffix_change(basic_filename, numbuf);
+            cpm_create_filename(basic_filename, cpm_filename, 0, 0);
+            file_buf = zx3_layout_file(bank_buf, mb->secbin->size, 0xc000, 3, &file_len);
+            disc_write_file(h, cpm_filename, file_buf, file_len);
+            fclose(fpbank);
+        }
+    }
+
+
     // Finalise the image
     if ( disc_write_edsk(h, disc_image_name) < 0 ) {
         exit_log(1,"Can't write disc image");

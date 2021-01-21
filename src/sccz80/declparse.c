@@ -15,6 +15,9 @@ Type   *type_uint = &(Type){ KIND_INT, 2, 1, .len=1 };
 Type   *type_long = &(Type){ KIND_LONG, 4, 0, .len=1 };
 Type   *type_ulong = &(Type){ KIND_LONG, 4, 1, .len=1 };
 Type   *type_double = &(Type){ KIND_DOUBLE, 6, 0, .len=1 }; 
+Type   *type_float16 = &(Type){ KIND_FLOAT16, 2, 0, .len=1 }; 
+Type   *type_longlong = &(Type){ KIND_LONGLONG, 8, 0, .len=1 }; 
+Type   *type_ulonglong = &(Type){ KIND_LONGLONG, 8, 1, .len=1 }; 
 
 static namespace  *namespaces = NULL;
 
@@ -34,7 +37,7 @@ static int32_t needsub(void)
         errorfmt("Negative Size Illegal", 0);
         val = (-val);
     }
-    if (valtype == KIND_DOUBLE)
+    if (kind_is_floating(valtype))
         warningfmt("unknown","Unexpected floating point encountered, taking int value");
     needchar(']'); /* force single dimension */
     return (val); /* and return size */
@@ -141,7 +144,7 @@ static Type *tag_hash = NULL;
 void add_tag(Type *type)
 {
     // addglb
-    HASH_ADD_STR(tag_hash, name, type);    
+    HASH_ADD_STR(tag_hash, name, type);   
 }
 
 Type *find_tag(const char *name)
@@ -199,7 +202,7 @@ void free_type(void *data)
     FREENULL(type);
 }
 
-Type *make_constant(const char *name, int32_t value)
+Type *make_constant(const char *name, int64_t value)
 {
     SYMBOL *ptr;
     Type *type = CALLOC(1,sizeof(*type));
@@ -304,7 +307,7 @@ static Type *parse_enum(Type *type)
                 Kind   valtype;
 
                 constexpr(&dval, &valtype, 1);
-                if ( valtype == KIND_DOUBLE )
+                if ( kind_is_floating(valtype))
                     warningfmt("unknown","Unexpected floating point encountered, taking int value");
                 value = dval;
             }
@@ -469,6 +472,7 @@ Type *parse_struct(Type *type, char isstruct)
         }
         str->size = size;  // It's now defined
         str->weak = 0;
+        debug_write_type(str);
     }
     // TODO: Only pointers to weak structures are valid
     type->kind = KIND_STRUCT;
@@ -511,7 +515,8 @@ static Type *parse_type(void)
     type->len = 1;
     if ( swallow("const")) {
         type->isconst = 1;
-    } else if (swallow("volatile")) {
+    } 
+    if (swallow("volatile")) {
         //warningfmt("unsupported-feature","Volatile type not supported by compiler");
     }
 
@@ -555,12 +560,20 @@ static Type *parse_type(void)
         type->kind = KIND_INT;
         type->size = 2;
     } else if ( amatch("long")) {
+        if ( amatch("long")) {
+            type->kind = KIND_LONGLONG;
+            type->size = 8;
+        } else {
+            type->kind = KIND_LONG;
+            type->size = 4;
+        }
         swallow("int");
-        type->kind = KIND_LONG;
-        type->size = 4;
     } else if ( amatch("float") || amatch("double")) {
         type->kind = KIND_DOUBLE;
         type->size = c_fp_size;
+    } else if ( amatch("_Float16")) {
+        type->kind = KIND_FLOAT16;
+        type->size = 2;
     } else if ( amatch("void")) {
         type->kind = KIND_VOID;
         type->size = 1;
@@ -586,6 +599,7 @@ static void parse_trailing_modifiers(Type *type)
     if ( c_use_r2l_calling_convention == NO ) {
         type->flags |= SMALLC;
     }
+    char shortcall_hl = 0;
     while (1) {
         if (amatch("__z88dk_fastcall") || amatch("__FASTCALL__")) {
             if( type->parameters && array_len(type->parameters) != 1 ) {
@@ -616,6 +630,31 @@ static void parse_trailing_modifiers(Type *type)
             continue;
         } else if ( amatch("__banked")) {
             type->flags |= BANKED;
+        } else if ( amatch("__z88dk_hl_call")) {
+            double module, addr;
+            Kind  valtype;
+
+            needchar('(');
+            if (constexpr(&module, &valtype, 0) == 0 ) {
+                errorfmt("Expecting a module address",1);
+            } else {
+                if ( module < 0 || module > 65535 ) {
+                    errorfmt("Module address value is out of range (%x)",1, (int)module);
+                }
+                needchar(',');
+                if ( constexpr(&addr,&valtype,0) == 0 ) {
+                    errorfmt("Expecting a call address",1);
+                } else {
+                    if ( addr < 0 || addr > 65535 ) {
+                        errorfmt("Short call value is out of range (%x)",1, (int)addr);
+                    }
+                    type->flags |= HL_CALL;
+                    type->funcattrs.hlcall_module = module;
+                    type->funcattrs.hlcall_addr = addr;
+                }
+            }
+            needchar(')');
+
         } else if ( amatch("__nonbanked")) {
             type->flags &= ~BANKED;
         } else if ( amatch("__z88dk_sdccdecl")) {
@@ -633,7 +672,8 @@ static void parse_trailing_modifiers(Type *type)
             }
             type->funcattrs.params_offset = val;
             needchar(')');
-        } else if ( amatch("__z88dk_shortcall")) { // __z88dk_shortcall(rstnumber, value)
+        } else if ( amatch("__z88dk_shortcall") || (shortcall_hl = amatch("__z88dk_shortcall_hl"))) { // __z88dk_shortcall(rstnumber, value)
+            uint32_t hl = shortcall_hl ? SHORTCALL_HL : 0;
             double   rstnumber,val;
             Kind  valtype;
 
@@ -651,12 +691,14 @@ static void parse_trailing_modifiers(Type *type)
                     if ( val < 0 || val > 65535 ) {
                         errorfmt("Short call value is out of range (%x)",1, (int)val);
                     }
-                    type->flags |= SHORTCALL;
+                    type->flags |= SHORTCALL | hl;
                     type->funcattrs.shortcall_rst = rstnumber;
                     type->funcattrs.shortcall_value = val;
                 }
             }
             needchar(')');
+        } else if ( amatch("__z88dk_shortcall_hl")) {
+            type->flags |= SHORTCALL_HL;
         } else if (amatch("__preserves_regs")) {
             int c;
             needchar('(');
@@ -872,7 +914,8 @@ Type *parse_decl(char name[], Type *base_type)
 
     if ( ispointer(base_type) && match("const")) {
         base_type->isconst = 1;
-    } else if ( ispointer(base_type) ) {
+    } 
+    if ( ispointer(base_type) ) {
         swallow("volatile");
     }
 
@@ -884,6 +927,7 @@ Type *parse_decl(char name[], Type *base_type)
             junk();
             return NULL;
         }
+        swallow("restrict");
         if ( amatch("__far"))
             base_type->isfar = 1;
         ptr = make_pointer(base_type);
@@ -940,10 +984,8 @@ int declare_local(int local_static)
 
             if  ( size < 0 ) size = 0;
 
-            sym = addloc(type->name, ID_VARIABLE, type->kind);
-            sym->ctype = type;
             declared += size;                        
-            sym->offset.i = Zsp - declared;
+            sym = addloc(type->name, type, ID_VARIABLE, type->kind, Zsp - declared);
             if ( cmatch('=')) {
                 sym->isassigned = 1;
                 sym->initialised = 1;
@@ -967,7 +1009,7 @@ int declare_local(int local_static)
                     Type *expr_type;
                     char *before, *start;
                     int   vconst;
-                    double val;
+                    zdouble val;
 
                     Zsp = modstk(Zsp - (declared - type->size), KIND_NONE, NO, YES);
                     declared = 0;
@@ -984,9 +1026,6 @@ int declare_local(int local_static)
                         // It's a constant that doesn't match the right type
                         LVALUE  lval={0};
                         clearstage(before, 0);
-                        if ( expr == KIND_DOUBLE ) {
-                            decrement_double_ref_direct(val);
-                        }
                         lval.ltype = type;
                         lval.val_type = type->kind;
                         lval.const_val = val;
@@ -996,7 +1035,7 @@ int declare_local(int local_static)
                         //conv type
                         force(type->kind, expr, type->isunsigned, expr_type->isunsigned, 0);
                     }
-                    StoreTOS(type->kind);
+                    gen_store_to_tos(type->kind);
                 }
             }
         }
@@ -1012,6 +1051,9 @@ Type *dodeclare(enum storage_type storage)
     SYMBOL *sym;
     decl_mode mode = MODE_NONE;
     int32_t    ataddress = -1;
+
+
+    gen_emit_line(lineno);
 
     if ( storage == TYPDEF ) mode = MODE_TYPEDEF;
     else if ( storage == EXTERNAL ) mode = MODE_EXTERN;
@@ -1119,7 +1161,7 @@ Type *dodeclare(enum storage_type storage)
 
         if ( sym->storage == EXTERNP ) {
             // Copy from local to the supplied address
-            output_section(c_init_section);
+            gen_switch_section(c_init_section);
             copy_to_extern(drop_name, type->name, alloc_size);
         }
 
@@ -1142,6 +1184,7 @@ Type *make_type(Kind kind, Type *tag)
         type->size = 1;
         break;
     case KIND_INT:
+    case KIND_FLOAT16:
         type->size = 2;
         break;
     case KIND_CPTR:
@@ -1149,6 +1192,9 @@ Type *make_type(Kind kind, Type *tag)
         break;
     case KIND_LONG:
         type->size = 4;
+        break;
+    case KIND_LONGLONG:
+        type->size = 8;
         break;
     case KIND_DOUBLE:
         type->size =  c_fp_size;
@@ -1210,7 +1256,7 @@ Type *dodeclare2(Type **base_type, decl_mode mode)
             errorfmt("Negative Size Illegal", 0);
             dval = (-dval);
         }
-        if ( valtype == KIND_DOUBLE )
+        if ( kind_is_floating(valtype) )
             warningfmt("invalid-value","Unexpected floating point encountered, taking int value");
         type->value = dval;
 
@@ -1423,10 +1469,26 @@ void flags_describe(Type *type, int32_t flags, UT_string *output)
     }  
     if ( flags & CRITICAL ) {
         utstring_printf(output,"__critical ");
-    }  
+    }
 
     if ( flags & SHORTCALL ) {
-        utstring_printf(output,"__z88dk_shortcall(%d,%d) ", type->funcattrs.shortcall_rst, type->funcattrs.shortcall_value);
+        if ( flags & SHORTCALL_HL ) {
+            utstring_printf(output,"__z88dk_shortcall_hl(%d,%d) ", type->funcattrs.shortcall_rst, type->funcattrs.shortcall_value);
+        } else {
+            utstring_printf(output,"__z88dk_shortcall(%d,%d) ", type->funcattrs.shortcall_rst, type->funcattrs.shortcall_value);
+        }
+    }
+
+    if ( flags & HL_CALL ) {
+        utstring_printf(output,"__z88dk_hl_call(%d,%d) ", type->funcattrs.hlcall_module, type->funcattrs.hlcall_addr);
+    }
+
+    if ( flags & HL_CALL ) {
+        utstring_printf(output,"__z88dk_hl_call(%d,%d) ", type->funcattrs.hlcall_module, type->funcattrs.hlcall_addr);
+    }
+
+    if ( flags & SHORTCALL_HL ) {
+        utstring_printf(output,"__z88dk_shortcall_hl ");
     }
 
     if ( type->funcattrs.params_offset ) {
@@ -1471,12 +1533,22 @@ void type_describe(Type *type, UT_string *output)
     case KIND_LONG:
         utstring_printf(output,"%slong ",type->isunsigned ? "unsigned " : "");
         break;
+    case KIND_LONGLONG:
+        utstring_printf(output,"%slong long ",type->isunsigned ? "unsigned " : "");
+        break;
     case KIND_FLOAT:
     case KIND_DOUBLE:    
         utstring_printf(output,"double ");
         break;
+    case KIND_FLOAT16:
+        utstring_printf(output,"_Float16 ");
+        break;
     case KIND_ARRAY:
-        snprintf(tail, sizeof(tail),"[%d]",type->len);
+        if ( type->len == -1 ) {
+            snprintf(tail, sizeof(tail),"[]");
+        } else {
+            snprintf(tail, sizeof(tail),"[%d]",type->len);
+        }
         break;
     case KIND_PTR:
         utstring_printf(output,"*");
@@ -1504,6 +1576,9 @@ void type_describe(Type *type, UT_string *output)
     case KIND_ENUM:
     case KIND_CARRY:
         break;
+    }
+    if ( !isspace(utstring_body(output)[utstring_len(output)-1])) {
+        utstring_printf(output," ");
     }
     utstring_printf(output,"%s%s",type->name,tail);
     return;
@@ -1640,7 +1715,7 @@ static void declfunc(Type *functype, enum storage_type storage)
     // Reset all local variables
     locptr = STARTLOC;
     // Setup local variables
-    output_section(c_code_section);
+    gen_switch_section(c_code_section);
     
 
 
@@ -1658,7 +1733,10 @@ static void declfunc(Type *functype, enum storage_type storage)
         where += zcriticaloffset();
     }
 
-    
+    // Functions that return long long have a buffer stuffed into them
+    if (functype->return_type->kind == KIND_LONGLONG ) {
+        where += 2;
+    }
 
     nl();
     {
@@ -1677,6 +1755,10 @@ static void declfunc(Type *functype, enum storage_type storage)
     if ( (functype->flags & SMALLC) == SMALLC ) {
         int i;
 
+        if (functype->return_type->kind == KIND_LONGLONG) {
+            outfmt("; longlong stuffed pointer at sp+2 size(2)\n");
+        }
+
         for ( i = array_len(functype->parameters) - 1; i >= 0; i-- ) {
             SYMBOL     *ptr;
             UT_string  *str;            
@@ -1689,17 +1771,16 @@ static void declfunc(Type *functype, enum storage_type storage)
                 continue;
             } 
             // Create a local variable
-            ptr = addloc(ptype->name, ID_VARIABLE, ptype->kind);
-            ptr->ctype = ptype;
-            ptr->offset.i = where;
+            ptr = addloc(ptype->name, ptype, ID_VARIABLE, ptype->kind, where);
             type_describe(ptype, str);
-            outfmt("; parameter '%s' at %d size(%d)\n",utstring_body(str),where, ptype->size);
+            outfmt("; parameter '%s' at sp+%d size(%d)\n",utstring_body(str),where, ptype->size);
             utstring_free(str);
             ptr->isassigned = 1;
             where += get_parameter_size(functype,ptype);
         }
     } else {
         int i;
+        ++scope_block;
         for ( i = 0; i < array_len(functype->parameters); i++ ) {
             SYMBOL    *ptr;
             UT_string *str;            
@@ -1712,9 +1793,7 @@ static void declfunc(Type *functype, enum storage_type storage)
                 continue;
             }
             // Create a local variable
-            ptr = addloc(ptype->name, ID_VARIABLE, ptype->kind);
-            ptr->ctype = ptype;            
-            ptr->offset.i = where;
+            ptr = addloc(ptype->name, ptype, ID_VARIABLE, ptype->kind, where);
 
             type_describe(ptype, str);            
             outfmt("; parameter '%s' at %d size(%d)\n", utstring_body(str),where, ptype->size);  
@@ -1723,6 +1802,8 @@ static void declfunc(Type *functype, enum storage_type storage)
             where += get_parameter_size(functype, ptype);
         }
     }
+
+    gen_emit_line(lineno);
 
     prefix();
     outname(currfn->name, dopref(currfn));
@@ -1739,9 +1820,9 @@ static void declfunc(Type *functype, enum storage_type storage)
         
     
     if ( (functype->flags & CRITICAL) == CRITICAL ) {
-        zentercritical();
+        gen_critical_enter();
     }
-    pushframe();
+    gen_push_frame();
 
     if (array_len(functype->parameters) && (functype->flags & (FASTCALL|NAKED)) == FASTCALL ) {
         Type *fastarg = array_get_byindex(functype->parameters,array_len(functype->parameters) - 1);
@@ -1749,10 +1830,12 @@ static void declfunc(Type *functype, enum storage_type storage)
 
         if ( fastarg->size == 2 || fastarg->size == 1) 
             zpush();
-        else if ( fastarg->kind == KIND_DOUBLE )
-            dpush();     
+        else if ( kind_is_floating(fastarg->kind) )
+            gen_push_float(fastarg->kind);     
         else if ( fastarg->size == 4 || fastarg->size == 3)
             lpush();
+        else if ( fastarg->kind == KIND_LONGLONG ) 
+            llpush();
         else
             adjust = 0;
 
@@ -1761,8 +1844,8 @@ static void declfunc(Type *functype, enum storage_type storage)
             int     i;
 
             if ( ptr ) {
-                ptr->offset.i -= (get_parameter_size(functype,fastarg) + 2);
-                where = 2;
+                ptr->offset.i = -get_parameter_size(functype,fastarg); 
+                where += 2;
             } else {
                 errorfmt("Something has gone very wrong, can't find parameter <%s>\n",1,fastarg->name);
             }
@@ -1787,7 +1870,7 @@ static void declfunc(Type *functype, enum storage_type storage)
         }
         /* do a statement, but if it's a return, skip */
         /* cleaning up the stack */
-        leave(NO, NO, 0);
+        gen_leave_function(KIND_NONE, NO, 0);
     }
     goto_cleanup();
     function_appendix(currfn);

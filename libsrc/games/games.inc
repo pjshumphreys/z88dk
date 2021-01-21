@@ -226,7 +226,18 @@ IF FORz80tvgame
 	defc	sndbit_mask = 1
 ENDIF
 
-; Compatibily ones only, the following ports don't have a beeper
+IF FORgl
+	defc	sndbit_port = $12
+	defc	sndbit_bit = 3
+	defc	sndbit_mask = 8
+ENDIF
+
+; Compatibility ones only, the following ports don't have a beeper
+IF FORondra
+        defc sndbit_port   = 0
+        defc sndbit_bit    = 0
+        defc sndbit_mask   = 0
+ENDIF
 IF FORsv8000
         defc sndbit_port   = 0
         defc sndbit_bit    = 0
@@ -319,11 +330,6 @@ IF FORm100
         defc sndbit_mask   = 0
 ENDIF
 
-IF FORsmc777
-    defc sndbit_port	= $1c
-    defc sndbit_bit    = 4
-    defc sndbit_mask   = $15
-ENDIF
 
 IF FORmyvision
     defc sndbit_port	= 0
@@ -343,6 +349,12 @@ IF FORhomelab2
     defc sndbit_mask   = 0
 ENDIF
 
+IF FORlm80c
+    defc sndbit_port	= 0
+    defc sndbit_bit    = 0
+    defc sndbit_mask   = 0
+ENDIF
+
 IF FORprimo
     defc sndbit_port	= $00 ;
     defc sndbit_bit    = 4
@@ -353,7 +365,6 @@ IF FORmikro80
     defc sndbit_port	= $4 ;
     defc sndbit_bit    = 1
     defc sndbit_mask   = $2	;
-
 ENDIF
 
 ; ********************************************************
@@ -404,6 +415,12 @@ IF FORrx78
 	defc sndbit_bit    = 3
 	defc sndbit_mask   = $0F			; $0F for full volume output
 	defc JOYSTICK_inkey = 1
+ENDIF
+
+IF FORsmc777
+    defc sndbit_port   = $53           ; possibly valid also for Sony SMC 70
+    defc sndbit_bit    = 3
+    defc sndbit_mask   = $0F                   ; $0F for full volume output
 ENDIF
 
 

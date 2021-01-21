@@ -118,7 +118,7 @@ sub appmake {
 	my($args) = @_;
 	
 	build_appmake();
-	run("appmake $args", 0, 'IGNORE');
+	run("z88dk-appmake $args", 0, 'IGNORE');
 }
 
 sub ticks {
@@ -127,7 +127,7 @@ sub ticks {
 	build_ticks();
 	z80asm($source, $options." -b");
 	
-	my $cpu = ($options =~ /(?:--cpu=?|-m=?)(\S+)/) ? $1 : "z80";
+	my $cpu = ($options =~ /(?:-m=?)(\S+)/) ? $1 : "z80";
 	run("z88dk-ticks test.bin -m$cpu -output test.out", 
 		0, "IGNORE");
 
@@ -201,7 +201,7 @@ sub z80nm {
 	my($file, $out) = @_;
 	
 	build_z80nm();
-	run("z80nm -a $file", 0, $out);
+	run("z88dk-z80nm -a $file", 0, $out);
 }
 
 #------------------------------------------------------------------------------

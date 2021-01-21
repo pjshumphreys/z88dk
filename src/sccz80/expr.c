@@ -12,7 +12,7 @@
 static int        heir1a(LVALUE *lval);
 static int        heir2a(LVALUE *lval);
 static int        heir2b(LVALUE *lval);
-static int        heir234(LVALUE *lval, int (*heir)(LVALUE *lval), char opch, void (*oper)(LVALUE *lval), void (*constoper)(LVALUE *lval, int32_t value));
+static int        heir234(LVALUE *lval, int (*heir)(LVALUE *lval), char opch, void (*oper)(LVALUE *lval), void (*constoper)(LVALUE *lval, int64_t value));
 static int        heir2(LVALUE *lval);
 static int        heir3(LVALUE *lval);
 static int        heir4(LVALUE *lval);
@@ -25,7 +25,7 @@ static int        heirb(LVALUE *lval);
 static SYMBOL    *deref(LVALUE *lval, char isaddr);
 
 
-Kind expression(int  *con, double *val, Type **type)
+Kind expression(int  *con, zdouble *val, Type **type)
 {
     LVALUE lval={0};
 
@@ -44,7 +44,7 @@ int heir1(LVALUE* lval)
     LVALUE lval2={0}, lval3={0};
     void (*oper)(LVALUE *) = NULL;
     void  (*doper)(LVALUE *lval) = NULL;
-    void (*constoper)(LVALUE *lval, int32_t constvalue) = NULL;
+    void (*constoper)(LVALUE *lval, int64_t constvalue) = NULL;
     int k;
 
     setstage(&before, &start);
@@ -69,11 +69,6 @@ int heir1(LVALUE* lval)
 
         /* If it's a const, then load it with the right type */
         if ( lval2.is_const ) {
-            /* This leaves the double with a count of 2 */
-            if ( lval2.val_type == KIND_DOUBLE ) {
-                decrement_double_ref(&lval2);
-                decrement_double_ref(&lval2);
-            }
             clearstage(before1, 0);
             lval2.val_type = lval->val_type;
             load_constant(&lval2);
@@ -226,13 +221,13 @@ int heir1a(LVALUE* lval)
             /* evaluate 'true' expression */
             if (heir1(&lval2))
                 rvalue(&lval2);
-            jump(endlab = getlabel());
+            gen_jp_label(endlab = getlabel());
             postlabel(falselab);
         } else {
             jumpnc(falselab = getlabel());
             if (heir1(&lval2))
                 rvalue(&lval2);
-            jump(endlab = getlabel());
+            gen_jp_label(endlab = getlabel());
             postlabel(falselab);
         }
         needchar(':');
@@ -240,23 +235,23 @@ int heir1a(LVALUE* lval)
         if (heir1(lval))
             rvalue(lval);
         /* check types of expressions and widen if necessary */
-        if (lval2.val_type == KIND_DOUBLE && lval->val_type != KIND_DOUBLE) {
-            zconvert_to_double(lval->val_type, lval->ltype->isunsigned);
+        if (kind_is_floating(lval2.val_type) && lval2.val_type != lval->val_type) {
+            zconvert_to_double(lval->val_type, lval2.val_type, lval->ltype->isunsigned);
             postlabel(endlab);
-        } else if (lval2.val_type != KIND_DOUBLE && lval->val_type == KIND_DOUBLE) {
-            jump(skiplab = getlabel());
+        } else if (lval2.val_type != lval->val_type && kind_is_floating(lval->val_type)) {
+            gen_jp_label(skiplab = getlabel());
             postlabel(endlab);
-            zconvert_to_double(lval2.val_type, lval2.ltype->isunsigned);
+            zconvert_to_double(lval2.val_type, lval->val_type, lval2.ltype->isunsigned);
             postlabel(skiplab);
         } else if (lval2.val_type == KIND_LONG && lval->val_type != KIND_LONG) {
-            widenlong(&lval2, lval);
+            widenintegers(&lval2, lval);
             lval->val_type = KIND_LONG;
             lval->ltype = lval->ltype->isunsigned ? type_ulong : type_long;
             postlabel(endlab);
         } else if (lval2.val_type != KIND_LONG && lval->val_type == KIND_LONG) {
-            jump(skiplab = getlabel());
+            gen_jp_label(skiplab = getlabel());
             postlabel(endlab);
-            widenlong(lval, &lval2);
+            widenintegers(lval, &lval2);
             lval->val_type = KIND_LONG;
             lval->ltype = lval->ltype->isunsigned ? type_ulong : type_long;
             postlabel(skiplab);
@@ -279,7 +274,7 @@ int heir2b(LVALUE* lval)
     return skim("&&", testjump, jumpnc, 0, 1, heir2, lval);
 }
 
-int heir234(LVALUE* lval, int (*heir)(LVALUE *lval), char opch, void (*oper)(LVALUE *lval), void (*constoper)(LVALUE *lval, int32_t value))
+int heir234(LVALUE* lval, int (*heir)(LVALUE *lval), char opch, void (*oper)(LVALUE *lval), void (*constoper)(LVALUE *lval, int64_t value))
 {
     LVALUE lval2={0};
     int k;
@@ -519,7 +514,7 @@ int heira(LVALUE *lval)
             rvalue(lval);
         intcheck(lval, lval);
         com(lval);
-        lval->const_val = (int32_t)~(uint32_t)lval->const_val;
+        lval->const_val = (int64_t)~(uint64_t)lval->const_val;
         lval->stage_add = NULL;
         return 0;
     } else if (cmatch('!')) {
@@ -534,9 +529,7 @@ int heira(LVALUE *lval)
         if (heira(lval))
             rvalue(lval);
         neg(lval);
-        if ( lval->val_type == KIND_DOUBLE ) decrement_double_ref(lval);
         lval->const_val = -lval->const_val;
-        if ( lval->val_type == KIND_DOUBLE ) increment_double_ref(lval);
         lval->stage_add = NULL;
         return 0;
     } else if (cmatch('*')) { /* unary * */
@@ -593,7 +586,7 @@ int heirb(LVALUE* lval)
     char *before, *start;
     char *before1, *start1;
     char sname[NAMESIZE];
-    double dval;
+    zdouble dval;
     int val, con, direct, k;
     // Kind valtype;
     char flags;
@@ -619,8 +612,9 @@ int heirb(LVALUE* lval)
                 }
                 setstage(&before, &start);
                 if (lval->ltype->kind == KIND_CPTR)
-                    zpushde();
-                zpush();
+                    lpush();
+                else
+                    zpush();
                 // valtype = expression(&con, &dval, &type);
                 expression(&con, &dval, &type);
                 // TODO: Check valtype
@@ -632,6 +626,9 @@ int heirb(LVALUE* lval)
                         Zsp += 2;
                     if ( val > lval->ltype->len && lval->ltype->len != -1 && lval->ltype->kind == KIND_ARRAY) {
                         warningfmt("unknown","Access of array at index %d is greater than size %d", val, lval->ltype->len);
+                    }
+                    if ( ispointer(lval->ltype) && lval->ltype->ptr->kind == KIND_ARRAY) {
+                        val *= lval->ltype->ptr->size / lval->ltype->ptr->ptr->size;
                     }
                     cscale(lval->ltype, &val);
                     val += lval->offset;
@@ -652,7 +649,10 @@ int heirb(LVALUE* lval)
                     }
                 } else {
                     /* non-constant subscript, calc at run time */
-                    if (ispointer(lval->ltype) ) {
+                    if ( ispointer(lval->ltype) && lval->ltype->ptr->kind == KIND_ARRAY) {
+                        LVALUE tmp = {0};
+                        mult_const(&tmp,lval->ltype->ptr->size);
+                    } else if (ispointer(lval->ltype) ) {
                         scale(lval->ltype->ptr->kind, lval->ltype->ptr->tag);
                     } else if ( lval->ltype->kind == KIND_ARRAY ) {
                         LVALUE tmp = {0};
@@ -675,8 +675,6 @@ int heirb(LVALUE* lval)
                         zpop();
                     }
                     zadd(lval);
-                    /* If long pointer restore upper 16 bits */
-                    //    if (lval->flags&FARPTR) zpop();
                 }
                 ptr = deref(lval, YES);
                 k = lval->ltype->kind == KIND_ARRAY ? 0 : 1;
@@ -711,9 +709,9 @@ int heirb(LVALUE* lval)
                     // We just called an SDCC function, we need to extend out to 16 bits, these names are wrong, but
                     // they do the right thing
                     if ( return_type->isunsigned ) {
-                        convUint2char();
+                        gen_conv_uint2char();
                     } else {
-                        convSint2char();
+                        gen_conv_sint2char();
                     }
                 }
                 lval->flags &= ~(CALLEE|FASTCALL|SMALLC);
@@ -728,7 +726,7 @@ int heirb(LVALUE* lval)
                     lval->indirect_kind = lval->ltype->kind;
                 }
             }
-            /* Handle structures... come in here with lval holding tehe previous
+            /* Handle structures... come in here with lval holding the previous
              * pointer to the struct thing..*/
             else if ((direct = cmatch('.')) || match("->")) {
                 Type *str = lval->ltype;
@@ -765,7 +763,6 @@ int heirb(LVALUE* lval)
                         direct = 0;
                         direct = 1;
                     }
-                    // TODO: Warning
                     str = str->tag;
                 }
 
@@ -784,7 +781,7 @@ int heirb(LVALUE* lval)
                  * not to access via far methods near data..
                  */
                 if (k && direct == 0)
-                    rvaluest(lval);
+                    rvalue(lval);
 
                 debug(DBG_FAR1, "prev=%s name=%s flags %d oflags %d", lval->symbol->name, ptr->name, lval->flags, lval->oflags);
                 flags = member_type->flags;
@@ -796,7 +793,6 @@ int heirb(LVALUE* lval)
                 lval->flags = flags;
 
                 zadd_const(lval, member_type->offset);
-//                lval->symbol = ptr; // 201710108: Remove this
                 lval->symbol = NULL;
                 lval->ltype = member_type;
                 lval->indirect_kind = lval->val_type = member_type->kind;
@@ -805,25 +801,8 @@ int heirb(LVALUE* lval)
                 lval->binop = NULL;
                 if (ispointer(lval->ltype) || lval->ltype->kind == KIND_ARRAY) {
                     lval->ptr_type = lval->ltype->ptr->kind;
-                    /* djm */
-                    // TODO
-                  //  if (ptr->flags & FARPTR) {
-                       // lval->indirect_kind = KIND_INT;
-                       // lval->val_type = KIND_INT;
-                    // } else {
-                    //     lval->indirect_kind = KIND_INT;
-                    //     lval->val_type = KIND_INT;
-                    // }
                 }
                 if (lval->ltype->kind == KIND_ARRAY || lval->ltype->kind == KIND_STRUCT ) {
-                   // lval->indirect_kind = lval->ltype->ptr->kind;
-                    /* array or struct */
-                    // TODO
-                 //   lval->ptr_type = ptr->type;
-                    /* djm Long pointers here? */
-                 //   lval->ptr_type = lval->ltype->kind;
-                 //   lval->val_type = KIND_PTR;
-                    //lval->val_type = ((ptr->flags & FARPTR) ? KIND_CPTR : KIND_INT);
                     k = 0;
                 } else
                     k = 1;

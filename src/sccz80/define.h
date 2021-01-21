@@ -54,6 +54,8 @@ typedef enum {
     MODE_CAST
 } decl_mode;
 
+
+
 typedef enum {
     KIND_NONE,
     KIND_VOID,
@@ -72,10 +74,15 @@ typedef enum {
     KIND_PORT8,
     KIND_PORT16,
     KIND_ENUM,
-    KIND_CARRY
+    KIND_CARRY,
+    KIND_FLOAT16,
+    KIND_LONGLONG,
 } Kind;
 
-#define kind_is_integer(k) ( k == KIND_CHAR || k == KIND_INT || k == KIND_SHORT || k == KIND_LONG )
+#define kind_is_floating(x)  ( (x) == KIND_DOUBLE || (x) == KIND_FLOAT16)
+#define kind_is_integer(k) ( k == KIND_CHAR || k == KIND_INT || k == KIND_SHORT || k == KIND_LONG || k == KIND_LONGLONG )
+
+#define get_float_type(k) (k == KIND_DOUBLE || k == KIND_FLOAT) ? type_double : type_float16
 
 typedef struct {
     size_t    size;
@@ -123,12 +130,14 @@ struct type_s {
         int   params_offset;
         uint8_t  shortcall_rst;
         uint16_t shortcall_value;
+        uint16_t hlcall_module;
+        uint16_t hlcall_addr;
     } funcattrs;
 
     UT_hash_handle hh;
 };
 
-extern Type *type_void, *type_carry, *type_char, *type_uchar, *type_int, *type_uint, *type_long, *type_ulong, *type_double;
+extern Type *type_void, *type_carry, *type_char, *type_uchar, *type_int, *type_uint, *type_long, *type_ulong, *type_double, *type_float16, *type_longlong, *type_ulonglong;
 
 
 enum ident_type {
@@ -153,7 +162,7 @@ enum storage_type {
 enum symbol_flags {
         FLAGS_NONE = 0,
     //    UNSIGNED = 1,
-        FARPTR = 0x02,
+    //    FARPTR = 0x02,
         FARACC = 0x04,
         FASTCALL = 0x08,     /* for certain lib calls only */
         CALLEE = 0x40,      /* Called function pops regs */
@@ -165,7 +174,9 @@ enum symbol_flags {
         CRITICAL = 0x1000,    /* Disable interrupts around the function */
         SDCCDECL = 0x2000,   /* Function uses sdcc convention for chars */
         SHORTCALL = 0x4000,   /* Function uses short call (via rst) */
-        BANKED = 0x8000      /* Call via the banked_call function */
+        SHORTCALL_HL = 0x8000,   /* Use ld HL,$addr style of shortcall */
+        BANKED = 0x10000,      /* Call via the banked_call function */
+        HL_CALL = 0x20000 /* Call via ld hl, (module) call (addr) */
 };
 
 
@@ -203,6 +214,7 @@ struct symbol_s {
                                 bit 2 = access via far methods
                               */
         int level;           /* Compound level that this variable is declared at */
+        int scope_block;     /* Scope block throughout file? */
         UT_hash_handle  hh;
 
 };
@@ -230,7 +242,7 @@ typedef struct switchtab_s SW_TAB;
 
 struct switchtab_s {
         int label ;             /* label for start of case */
-        int32_t value ;             /* value associated with case */
+        int64_t value ;             /* value associated with case */
 } ;
 
 
@@ -279,7 +291,7 @@ struct gototab_s {
 
 /*      Define the input line                   */
 
-#define LINESIZE        1024
+#define LINESIZE        65536
 #define LINEMAX         (LINESIZE-1)
 #define MPMAX           LINEMAX
 
@@ -378,9 +390,9 @@ struct lvalue_s {
         SYMBOL *symbol ;                /* symbol table address, or 0 for constant */
         Type   *ltype;
         Kind    indirect_kind;                  /* type of indirect object, 0 for static object */
-        int ptr_type ;                  /* type of pointer or array, 0 for other idents */
+        Kind ptr_type ;                  /* type of pointer or array, 0 for other idents */
         int is_const ;                  /* true if constant expression */
-        double const_val ;                        /* value of constant expression (& other uses) */
+        zdouble const_val ;                        /* value of constant expression (& other uses) */
         void (*binop)(LVALUE *lval) ;                /* function address of highest/last binary operator */
         char *stage_add ;               /* stage addess of "oper 0" code, else 0 */
         Type *stage_add_ltype;          /* Type at stage_add being set */
@@ -403,7 +415,9 @@ enum optimisation {
         OPT_SUB32          = (1 << 4),
         OPT_INT_COMPARE    = (1 << 5),
         OPT_LONG_COMPARE   = (1 << 6),
-        OPT_UCHAR_MULT     = (1 << 7)
+        OPT_UCHAR_MULT     = (1 << 7),
+        OPT_DOUBLE_CONST   = (1 << 8),
+        OPT_CHAR_COMPARE   = (1 << 9),
 };
 
 enum maths_mode {
@@ -413,7 +427,8 @@ enum maths_mode {
     MATHS_MBF40, // 40 bit Microsoft 
     MATHS_MBF64, // 64 bit Microsoft double precision
     MATHS_Z88,   // Special handling for z88 (subtype of MATHS_Z80)
-    MATHS_IEEE16, // 16 bit ieee
+    MATHS_IEEE16, // Used for _Float16
+    MATHS_AM9511  // AM9511 math processor format
 };
 
 
@@ -425,5 +440,10 @@ enum maths_mode {
         printf("%s\n", utstring_body(output)); \
         utstring_free(output); \
     } while (0)
+
+
+extern UT_string *debug_utstr;
+extern UT_string *debug2_utstr;
+extern int        scope_block;
 
 #endif

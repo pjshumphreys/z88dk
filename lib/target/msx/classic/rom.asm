@@ -71,6 +71,119 @@ endloop:
 
 l_dcal:	jp	(hl)		;Used for call by function pointer
 
+	GLOBAL	banked_call
+
+	; Memory address for changing the mapping at $8000 and $a000
+	; If _A000 is 0 then we work with 16kb banks
+	; These values are by default the KONAMI mapper
+IF DEFINED_MAPPER_ASCII16 = 1
+	defc	MAPPER_ADDRESS_4000 = $6000
+	defc	MAPPER_ADDRESS_6000 = $0000
+	defc	MAPPER_ADDRESS_8000 = $7000
+	defc	MAPPER_ADDRESS_A000 = $0000
+ELIF DEFINED_MAPPER_ASCII8 = 1
+	defc	MAPPER_ADDRESS_4000 = $6000
+	defc	MAPPER_ADDRESS_6000 = $6800
+	defc	MAPPER_ADDRESS_8000 = $7000
+	defc	MAPPER_ADDRESS_A000 = $7800
+ELIF DEFINED_MAPPER_KONAMI = 1
+	; Konami Mapper without SCC
+	defc	MAPPER_ADDRESS_4000 = $0000
+	defc	MAPPER_ADDRESS_6000 = $6000
+	defc	MAPPER_ADDRESS_8000 = $8000
+	defc	MAPPER_ADDRESS_A000 = $A000
+ELSE
+	defc	MAPPER_ADDRESS_4000 = $0000
+	defc	MAPPER_ADDRESS_6000 = $0000
+	defc	MAPPER_ADDRESS_8000 = $0000
+	defc	MAPPER_ADDRESS_A000 = $0000
+ENDIF
+
+	; Bias the Mapper detection heuristics to try to overcome any
+	; collisions in data.
+IF MAPPER_ADDRESS_4000 != 0
+	ld	(MAPPER_ADDRESS_4000),a
+ENDIF
+IF MAPPER_ADDRESS_6000 != 0
+	ld	(MAPPER_ADDRESS_6000),a
+ENDIF
+IF MAPPER_ADDRESS_8000 != 0
+	ld	(MAPPER_ADDRESS_8000),a
+ENDIF
+IF MAPPER_ADDRESS_A000 != 0
+	ld	(MAPPER_ADDRESS_A000),a
+ENDIF
+IF MAPPER_ADDRESS_4000 != 0
+	ld	(MAPPER_ADDRESS_4000),a
+ENDIF
+IF MAPPER_ADDRESS_6000 != 0
+	ld	(MAPPER_ADDRESS_6000),a
+ENDIF
+IF MAPPER_ADDRESS_8000 != 0
+	ld	(MAPPER_ADDRESS_8000),a
+ENDIF
+IF MAPPER_ADDRESS_A000 != 0
+	ld	(MAPPER_ADDRESS_A000),a
+ENDIF
+IF MAPPER_ADDRESS_4000 != 0
+	ld	(MAPPER_ADDRESS_4000),a
+ENDIF
+IF MAPPER_ADDRESS_6000 != 0
+	ld	(MAPPER_ADDRESS_6000),a
+ENDIF
+IF MAPPER_ADDRESS_8000 != 0
+	ld	(MAPPER_ADDRESS_8000),a
+ENDIF
+IF MAPPER_ADDRESS_A000 != 0
+	ld	(MAPPER_ADDRESS_A000),a
+ENDIF
+
+IF MAPPER_ADDRESS_8000 != 0
+banked_call:
+        pop     hl              ; Get the return address
+        ld      (mainsp),sp
+        ld      sp,(tempsp)
+        ld      a,(__current_bank)
+        push    af              ; Push the current bank onto the stack
+        ld      e,(hl)          ; Fetch the call address
+        inc     hl
+        ld      d,(hl)
+        inc     hl
+        ld      a,(hl)          ; ...and page
+  IF MAPPER_ADDRESS_A000 != 0
+	add	a		; For 8kb pages we have to double - our
+				; model is for 16kb pages
+  ENDIF
+	inc	hl
+        inc     hl              ; Yes this should be here
+        push    hl              ; Push the real return address
+        ld      (tempsp),sp
+        ld      sp,(mainsp)
+        ld      (__current_bank),a
+	ld	(MAPPER_ADDRESS_8000),a
+  IF MAPPER_ADDRESS_A000 != 0
+	inc	a
+	ld	(MAPPER_ADDRESS_A000),a
+  ENDIF
+        ld      l,e
+        ld      h,d
+	call	l_dcal		; jp(hl)
+        ld      (mainsp),sp
+        ld      sp,(tempsp)
+        pop     bc              ; Get the return address
+        pop     af              ; Pop the old bank
+        ld      (tempsp),sp
+        ld      sp,(mainsp)
+        ld      (__current_bank),a
+	ld	(MAPPER_ADDRESS_8000),a
+  IF MAPPER_ADDRESS_A000 != 0
+	inc	a
+	ld	(MAPPER_ADDRESS_A000),a
+  ENDIF
+        push    bc
+        ret
+ENDIF
+
 
 IFNDEF CRT_ORG_BSS
 	defc CRT_ORG_BSS = $C000   ; Ram variables are kept in RAM in high memory
@@ -86,3 +199,27 @@ ENDIF
 
         INCLUDE "crt/classic/crt_runtime_selection.asm"
 	INCLUDE "crt/classic/crt_section.asm"
+
+	SECTION	data_driver
+
+IF MAPPER_ADDRESS_8000 != 0
+  IF MAPPER_ADDRESS_A000 == 0
+__current_bank:	defb	1
+  ELSE
+__current_bank:	defb	2
+  ENDIF
+ENDIF
+
+        SECTION bss_driver
+
+mainsp: defw    0
+
+tempstack:      defs    CLIB_BANKING_STACK_SIZE
+
+        SECTION data_driver
+
+tempsp: defw    tempstack + CLIB_BANKING_STACK_SIZE
+
+IF MAPPER_ADDRESS_8000 != 0
+	INCLUDE "target/msx/classic/megarom.asm"
+ENDIF

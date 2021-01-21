@@ -10,7 +10,7 @@ IF FORsms
 	defc VDP_CMD     = $bf
 	defc VDP_STATUS  = $bf ; ?
 	defc VRAM_SIZE   = 16
-	defc VDP_EXPORT_DIRECT = 1
+	defc VDP_EXPORT_DIRECT = 0
 	defc VDP_EXPORT_GFX_DIRECT = 1
 ENDIF
 	
@@ -133,3 +133,14 @@ IF FORspc1000
 	defc VDP_EXPORT_DIRECT = 0
 	defc VDP_EXPORT_GFX_DIRECT = 0
 ENDIF
+
+IF FORlm80c
+	defc VDP_DATA    = @00110000
+	defc VDP_DATAIN  = @00110000
+	defc VDP_CMD     = @00110010
+	defc VDP_STATUS  = @00110010
+	defc VRAM_SIZE   = 16
+	defc VDP_EXPORT_DIRECT = 1
+	defc VDP_EXPORT_GFX_DIRECT = 1
+ENDIF
+

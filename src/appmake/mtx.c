@@ -17,7 +17,6 @@ static char              audio        = 0;
 static char              fast         = 0;
 static char              khz_22       = 0;
 static char              mtb          = 0;
-static char              mtx          = 0;
 static char              dumb         = 0;
 static char              loud         = 0;
 static char              help         = 0;
@@ -37,7 +36,6 @@ option_t mtx_options[] = {
     {  0,  "22",       "22050hz bitrate option",     OPT_BOOL,  &khz_22 },
     {  0,  "loud",     "Louder audio volume",        OPT_BOOL,  &loud },
     {  0,  "mtb",      "MTB output file mode",       OPT_BOOL,  &mtb },
-    {  0,  "mtx",      "append MTX extension",       OPT_BOOL,  &mtx },
     {  0,  "dumb",     "Just convert to WAV a tape file",  OPT_BOOL,  &dumb },
     {  0 , "org",      "Origin of the binary",       OPT_INT,   &origin },
     {  0,  NULL,       NULL,                         OPT_NONE,  NULL }
@@ -142,36 +140,31 @@ int mtx_exec(char* target)
             strcpy(filename, binname);
             if (mtb)
                 suffix_change(filename, ".mtb");
-            else if (mtx)
-                suffix_change(filename, ".mtx");
             else
-                suffix_change(filename, "");
+                suffix_change(filename, ".mtx");
         } else {
             strcpy(filename, outfile);
         }
 
         if (strcmp(binname, filename) == 0) {
-            fprintf(stderr, "Input and output file names must be different\n");
-            myexit(NULL, 1);
+            exit_log(1,  "Input and output file names must be different\n");
         }
 
         if (origin != -1) {
             pos = origin;
         } else {
             if ((pos = get_org_addr(crtfile)) == -1) {
-                myexit("Could not find parameter ZORG (not z88dk compiled?)\n", 1);
+                exit_log(1,"Could not find parameter ZORG (not z88dk compiled?)\n");
             }
         }
 
         if ((fpin = fopen_bin(binname, crtfile)) == NULL) {
-            fprintf(stderr, "Can't open input file %s\n", binname);
-            myexit(NULL, 1);
+            exit_log(1, "Can't open input file %s\n", binname);
         }
 
         if (fseek(fpin, 0, SEEK_END)) {
-            fprintf(stderr, "Couldn't determine size of file\n");
             fclose(fpin);
-            myexit(NULL, 1);
+            exit_log(1,  "Couldn't determine size of file\n");
         }
 
         len = ftell(fpin);
@@ -180,7 +173,7 @@ int mtx_exec(char* target)
 
         if ((fpout = fopen(filename, "wb")) == NULL) {
             fclose(fpin);
-            myexit("Can't open output file\n", 1);
+            exit_log(1,"Can't open output file\n");
         }
 
         /* HEADER */
@@ -375,13 +368,12 @@ The basic block must contain the following instructions:
     /* ***************************************** */
     if ((audio) || (fast) || (khz_22) || (loud)) {
         if ((fpin = fopen(filename, "rb")) == NULL) {
-            fprintf(stderr, "Can't open file %s for wave conversion\n", filename);
-            myexit(NULL, 1);
+            exit_log(1,  "Can't open file %s for wave conversion\n", filename);
         }
 
         if (fseek(fpin, 0, SEEK_END)) {
             fclose(fpin);
-            myexit("Couldn't determine size of file\n", 1);
+            exit_log(1,"Couldn't determine size of file\n");
         }
         len = ftell(fpin);
         fseek(fpin, 0, SEEK_SET);
@@ -391,17 +383,15 @@ The basic block must contain the following instructions:
         suffix_change(wavfile, ".RAW");
 
         if ((fpout = fopen(wavfile, "wb")) == NULL) {
-            fprintf(stderr, "Can't open output raw audio file %s\n", wavfile);
-            myexit(NULL, 1);
+            exit_log(1, "Can't open output raw audio file %s\n", wavfile);
         }
 
         c = getc(fpin);
         ungetc(c, fpin);
         if (!mtb && c != 0xff) {
-            fprintf(stderr, "MTX file not valid for WAV conversion.\n");
             fclose(fpin);
             fclose(fpout);
-            myexit(NULL, 1);
+            exit_log(1, "MTX file not valid for WAV conversion.\n");
         }
 
         /* leading silence */

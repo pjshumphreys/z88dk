@@ -10,11 +10,18 @@
 
 ._func
 	ld	hl,(_y)
-	ld	de,40
-	call	l_mult
+	ld	b,h
+	ld	c,l
 	add	hl,hl
-	ld	bc,30720
+	add	hl,hl
 	add	hl,bc
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	a,120
+	add	h
+	ld	h,a
 	push	hl
 	ld	hl,(_x)
 	add	hl,hl
@@ -26,10 +33,17 @@
 
 ._func2
 	ld	hl,(_y)
-	ld	de,40
-	call	l_mult
-	ld	bc,30720
+	ld	b,h
+	ld	c,l
+	add	hl,hl
+	add	hl,hl
 	add	hl,bc
+	add	hl,hl
+	add	hl,hl
+	add	hl,hl
+	ld	a,120
+	add	h
+	ld	h,a
 	ex	de,hl
 	ld	hl,(_x)
 	add	hl,de

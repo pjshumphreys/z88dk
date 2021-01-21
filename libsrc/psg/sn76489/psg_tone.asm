@@ -1,5 +1,6 @@
 	SECTION code_clib
 	
+IF !__CPU_INTEL__ & !__CPU_RABBIT__ & !__CPU_GBZ80__
 	PUBLIC	set_sound_freq
 	PUBLIC	_set_sound_freq
 	PUBLIC	psg_tone
@@ -13,7 +14,7 @@
 ; Sets the sound frequency for a given channel
 ;==============================================================
 
-	INCLUDE	"psg/sn76489.inc"
+	INCLUDE	"sn76489.inc"
 
 .set_sound_freq
 ._set_sound_freq
@@ -41,10 +42,13 @@
 	or	a, $80
 	or	a, b		; Prepares the first byte of the command
 IF HAVE16bitbus
-        ld      bc,psgport
-        out     (c),a
+    ld      bc,psgport
+    out     (c),a
 ELSE
-	out	(psgport), a	; Sends it
+    out	(psgport), a	; Sends it
+  IF PSGLatchPort
+    in a,(PSGLatchPort)
+  ENDIF
 ENDIF
 	
 	ld	a, e
@@ -64,10 +68,14 @@ ENDIF
 	
 	or	a, b		; Puts them together
 IF HAVE16bitbus
-        ld      bc,psgport
-        out     (c),a
+    ld      bc,psgport
+    out     (c),a
 ELSE
-	out	(psgport), a	; Sends the second byte of the command
+    out	(psgport), a	; Sends the second byte of the command
+  IF PSGLatchPort
+    in a,(PSGLatchPort)
+  ENDIF
 ENDIF
 
 	ret
+ENDIF

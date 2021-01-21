@@ -10,7 +10,7 @@
 **/*.o
 **/*.orig
 **/*.vcxproj.user
-**/.prove
+**/.prove*
 **/.vscode/
 **/_prove
 **/lib*.a
@@ -57,6 +57,13 @@ examples/z88/app/rpn.epr
 examples/z88/app/useless.epr
 examples/z88/app/viewer.epr
 examples/z88/app/wc.epr
+examples/z88/cube.epr
+examples/z88/cubeflt16.epr
+examples/z88/dstar.epr
+examples/z88/farmalloc.epr
+examples/z88/rpn.epr
+examples/z88/useless.epr
+examples/z88/wc.epr
 include/_DEVELOPMENT/clang/lib/
 include/_DEVELOPMENT/proto/lib/
 include/_DEVELOPMENT/sccz80/lib/
@@ -85,6 +92,7 @@ libsrc/_DEVELOPMENT/target/z180/z180_crt.asm
 libsrc/_DEVELOPMENT/target/z80/z80_crt.asm
 libsrc/_DEVELOPMENT/target/zx/zx_crt.asm
 libsrc/_DEVELOPMENT/target/zxn/zxn_crt.asm
+libsrc/_DEVELOPMENT/target/**/obj/**
 libsrc/alloc/balloc/obj/
 src/appmake/appmake
 src/common/t/test

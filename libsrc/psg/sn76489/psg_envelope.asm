@@ -1,5 +1,6 @@
 	SECTION code_clib
 	
+IF !__CPU_INTEL__ & !__CPU_RABBIT__ & !__CPU_GBZ80__
 	PUBLIC	psg_envelope
 	PUBLIC	_psg_envelope
 
@@ -13,7 +14,7 @@
 ;  foo entry, envelope is not avaliable on SN76489
 ;==============================================================
 
-	INCLUDE	"psg/sn76489.inc"
+	INCLUDE	"sn76489.inc"
 
 .psg_envelope
 ._psg_envelope
@@ -38,6 +39,10 @@ IF HAVE16bitbus
 	out	(c),a
 ELSE
 	out	(psgport), a	; Sends it
+  IF PSGLatchPort
+    in a,(PSGLatchPort)
+  ENDIF
 ENDIF
 
 	ret
+ENDIF

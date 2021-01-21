@@ -1052,7 +1052,7 @@ write_file("test.asm", <<'...');
 
 
 # link on platform 1
-$cmd = "./z80asm -itest_plat1.lib -b test";
+$cmd = "./z80asm -ltest_plat1.lib -b test";
 ok 1, $cmd;
 ($stdout, $stderr, $return, @dummy) = capture { system $cmd; };
 is_text( $stdout, "", "stdout" );
@@ -1062,7 +1062,7 @@ test_binfile("test.bin", pack("C*", 0xC3, 3, 0, 0x3E, 1, 0xC9));
 
 
 # link on platform 2
-$cmd = "./z80asm -itest_plat2.lib -b test";
+$cmd = "./z80asm -ltest_plat2.lib -b test";
 ok 1, $cmd;
 ($stdout, $stderr, $return, @dummy) = capture { system $cmd; };
 is_text( $stdout, "", "stdout" );
@@ -1122,7 +1122,7 @@ is_text( $stdout, "", "stdout" );
 is_text( $stderr, "", "stderr" );
 ok !!$return == !!0, "retval";
 
-$cmd = "../../src/z80nm/z80nm test1.o";
+$cmd = "../../src/z80nm/z88dk-z80nm test1.o";
 ok 1, $cmd;
 ($stdout, $stderr, $return, @dummy) = capture { system $cmd; };
 $stdout = join("\n", grep {/__/} split(/\n/, $stdout))."\n";
@@ -1134,14 +1134,14 @@ is_text( $stderr, "", "stderr" );
 ok !!$return == !!0, "retval";
 
 
-$cmd = "./z80asm --output=test1.o test1.asm";
+$cmd = "./z80asm -otest1.o test1.asm";
 ok 1, $cmd;
 ($stdout, $stderr, $return, @dummy) = capture { system $cmd; };
 is_text( $stdout, "", "stdout" );
 is_text( $stderr, "", "stderr" );
 ok !!$return == !!0, "retval";
 
-$cmd = "../../src/z80nm/z80nm test1.o";
+$cmd = "../../src/z80nm/z88dk-z80nm test1.o";
 ok 1, $cmd;
 ($stdout, $stderr, $return, @dummy) = capture { system $cmd; };
 $stdout = join("\n", grep {/__/} split(/\n/, $stdout))."\n";

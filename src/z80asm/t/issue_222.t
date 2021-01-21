@@ -94,14 +94,14 @@ my $ramtop_tap =
 
 # no org, not verbose
 unlink_testfiles();
-z80asm($asm, "+zx");
+z80asm($asm, "+zx -m");
 check_bin_file("test.bin", $bin);
 check_bin_file("test.tap", $rem_tap);
 
 
 # no org, verbose
 unlink_testfiles();
-z80asm($asm, "+zx -v", 0, <<'END');
+z80asm($asm, "+zx -m -v", 0, <<'END');
 	Reading library 'z80asm-z80-.lib'
 	Predefined constant: __CPU_Z80__ = $0001
 	Predefined constant: __CPU_ZILOG__ = $0001
@@ -112,7 +112,7 @@ z80asm($asm, "+zx -v", 0, <<'END');
 
 	Code size: 4 bytes ($5CD0 to $5CD3)
 	Creating binary 'test.bin'
-	appmake +zx -b "test.bin" -o "test.tap" --org 23760
+	z88dk-appmake +zx -b "test.bin" -o "test.tap" --org 23760
 END
 check_bin_file("test.bin", $bin);
 check_bin_file("test.tap", $rem_tap);
@@ -120,14 +120,14 @@ check_bin_file("test.tap", $rem_tap);
 
 # ignore ORG statements
 unlink_testfiles();
-z80asm("org 20000\n".$asm, "+zx");
+z80asm("org 20000\n".$asm, "+zx -m");
 check_bin_file("test.bin", $bin);
 check_bin_file("test.tap", $rem_tap);
 
 
 # error for -r below 23760
 unlink_testfiles();
-z80asm($asm, "+zx -r23759", 1, "", <<'END');
+z80asm($asm, "+zx -m -r23759", 1, "", <<'END');
 	Error: invalid origin: 23759
 END
 check_bin_file("test.bin", $bin);
@@ -136,7 +136,7 @@ ok ! -f "test.tap", "no test.tap";
 
 # ignore split sections
 unlink_testfiles();
-z80asm(<<'END', "+zx", 0, "", <<'END');
+z80asm(<<'END', "+zx -m", 0, "", <<'END');
 	section code1
 	org 23760
 	ld bc, 1234
@@ -154,7 +154,7 @@ check_bin_file("test.tap", $rem_tap);
 
 # above ramtop
 unlink_testfiles();
-z80asm($asm, "+zx -r24000");
+z80asm($asm, "+zx -m -r24000");
 check_bin_file("test.bin", $bin);
 check_bin_file("test.tap", $ramtop_tap);
 
@@ -251,7 +251,7 @@ z80asm($asm, "+zx81 -v", 0, <<'END', "");
 
 	Code size: 4 bytes ($4082 to $4085)
 	Creating binary 'test.bin'
-	appmake +zx81 -b "test.bin" -o "test.P" --org 16514
+	z88dk-appmake +zx81 -b "test.bin" -o "test.P" --org 16514
 END
 check_bin_file("test.bin", $bin);
 check_bin_file("test.P", $rem_P);

@@ -6,26 +6,45 @@ z88dk vx.x.x - xx.xx.xxxx
 Detailed but incomplete changelist:
 
 - [classic] WYZTracker is now available for AY music and SFX
+- [classic] Vortex Tracker2 is now available for AY music and SFX
+- [classic] PSGLib is now available for SN76489 music and SFX
 - [classic] Interrupt code is now 8080 clean
 - [classic] +cpm: Vector06c disc creation
-- [classic] +svi: Generic console now works again
-- [classic] +zx: The enter key now works with ROM input
-- [classic] +vector06c: New target
-- [classic] +homelab2: New target for the Homelab 2 machine
+- [classic] +dai: New target
+- [classic] +gb: Banking now works for both sdcc and sccz80
+- [classic] +gb: MBF32 floating point maths is now available
 - [classic] +homelab: New target for the Homelab 3/4 machine
+- [classic] +homelab2: New target for the Homelab 2 machine
+- [classic] +msx: Banking now works for both sdcc and sccz80
+- [classic] +msx: MegaROMs can now be created
+- [classic] +ondra: New target
+- [classic] +special: New target
+- [classic] +svi: Generic console now works again
+- [classic] +vector06c: New target
+- [classic] +zx: The enter key now works with ROM input
+- [classic] +zx: Banked code support.
+- [classic] +zx: 128k .TAP and .DSK images can be created
+- [classic] +zxn: New target
+- [classic] all: IEEE-754 16 bit (adjunct) maths library
+- [classic] all: DAI 8080 (Am9511) 32 bit maths library
 - [newlib] +zx WYZTRacker is now available
+- [newlib] all: IEEE-754 16 bit (adjunct) maths library
 - [sccz80] genmath/math48: Fixes to builtin ldexp implementation
 - [sccz80] Bitfields now work and on the 8080
 - [sccz80] Code generator fixes for gbz80
+- [sccz80] Support for long long integer types
+- [sccz80] Support added for IEEE-754 16 bit floating point numbers
+- [sccz80] Support added for Am9511 32 bit floating point numbers
+- [z80asm] Linking speed cleanup
 - [z80asm] db/dw/ds etc synonyms are now accepted
-- [zsdcc] Upgraded to SDCC 4.0.0 r11556 (bugfixes)
+- [zsdcc] Upgraded to SDCC 4.0.4 r11940 (bugfixes)
 
 z88dk v2.0 - 03.02.2020
 
 In addition to the usual collection of bugfixes and enhancements, this
 release of z88dk contains some major new features which are noteworthy:
 
-* A (mostly) IEEE754 compliant maths library is available for both classic
+* A (mostly) IEEE-754 compliant maths library is available for both classic
   and newlib.
 * The sccz80 compiler and classic +cpm and +pmd85 targets now support
   generating binaries that run on 8080 hardware
@@ -71,7 +90,7 @@ The more detailed (yet incomplete) changelist is below:
 - [classic] +ts2068: gencon supports hires and multicolour modes
 - [classic} +vz: Support for graphics
 - [classic] +x1: Graphics and console improvements
-- [classic] all: IEEE 754 32 bit maths library
+- [classic] all: IEEE-754 32 bit maths library
 - [classic] all: BBC BASIC 40 bit maths library
 - [sccz80] #1102: Trailing comma support in struct initialisation
 - [sccz80] Optimisation rule fixes and improvements
@@ -86,7 +105,7 @@ The more detailed (yet incomplete) changelist is below:
 - [zsdcc] Upgraded to SDCC 4.0.0 r11535
 - [newlib] +scz180: Support for this target
 - [newlib] +zxn: ZX Spectrum Next architecture renamed z80n
-- [newlib] +hbios: Support for RomWBW HBIOS API - incl RetroBrew and rc2014
+- [newlib] +hbios: Support for RomWBW HBIOS API - incl RetroBrew and RC2014
 
 z88dk v1.99C - 19.01.2019
 

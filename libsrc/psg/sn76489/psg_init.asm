@@ -10,11 +10,12 @@
 ;	$Id: psg_init.asm $
 ;
 
+IF !__CPU_INTEL__ & !__CPU_RABBIT__ & !__CPU_GBZ80__
         SECTION code_clib
 	PUBLIC	psg_init
 	PUBLIC	_psg_init
 	
-	INCLUDE	"psg/sn76489.inc"
+	INCLUDE	"sn76489.inc"
 
 psg_init:
 _psg_init:
@@ -22,11 +23,26 @@ _psg_init:
 	LD	BC,psgport
 	LD	A,$9F
 	OUT	(C),A
+IF PSGLatchPort
+    in a,(PSGLatchPort)
+ENDIF
 	LD	A,$BF
+IF PSGLatchPort
+    in a,(PSGLatchPort)
+ENDIF
 	OUT	(C),A
+IF PSGLatchPort
+    in a,(PSGLatchPort)
+ENDIF
 	LD	A,$DF
 	OUT	(C),A
-	LD	A,$FF
-	OUT	(C),A
-	
+IF PSGLatchPort
+    in a,(PSGLatchPort)
+ENDIF
+    LD	A,$FF
+    OUT	(C),A
+IF PSGLatchPort
+    in a,(PSGLatchPort)
+ENDIF
 	RET
+ENDIF

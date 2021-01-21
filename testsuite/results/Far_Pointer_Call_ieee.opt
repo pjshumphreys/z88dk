@@ -16,27 +16,26 @@
 	push	hl
 	ld	hl,0	;const
 	ld	de,16256
-	call	l_f32_sint2f
 	push	de
 	push	hl
 	ld	hl,2	;const
 	push	hl
-	ld	hl,2
-	add	hl,de
+	ld	hl,6	;const
+	add	hl,sp
 	ld	e,(hl)
 	inc	hl
 	ld	d,(hl)
 	inc	hl
 	ld	l,(hl)
 	ex	de,hl
-	ld	a,1
+	ld	a,3
 	call	l_farcall
 	pop	bc
 	pop	bc
 	pop	bc
+	pop	bc
+	pop	bc
 	call	l_gchar
-	pop	bc
-	pop	bc
 	ret
 
 
@@ -49,28 +48,27 @@
 	push	hl
 	ld	hl,0	;const
 	ld	de,16256
-	call	l_f32_sint2f
 	push	de
 	push	hl
 	ld	hl,2	;const
 	push	hl
-	ld	hl,2
-	add	hl,de
+	ld	hl,6	;const
+	add	hl,sp
 	ld	e,(hl)
 	inc	hl
 	ld	d,(hl)
 	inc	hl
 	ld	l,(hl)
 	ex	de,hl
-	ld	a,1
+	ld	a,3
 	call	l_farcall
+	pop	bc
+	pop	bc
 	pop	bc
 	pop	bc
 	pop	bc
 	call	lp_gchar
 	call	l_sxt
-	pop	bc
-	pop	bc
 	ret
 
 

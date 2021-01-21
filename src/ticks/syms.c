@@ -8,7 +8,6 @@ static symbol  *symbols[65536] = {0};
 static symbol  *symbols_byname = NULL;
 
 
-static cfile   *cfiles = NULL;
 
 static void demangle_filename(const char *input, char *buf, size_t buflen, int *lineno)
 {
@@ -16,29 +15,11 @@ static void demangle_filename(const char *input, char *buf, size_t buflen, int *
     char *ptr;
 
     *lineno = -1;
-    input += strlen("__CFILE___");
+    ptr = strrchr(input, ':');
 
-    while ( *input ) {
-        char   c = *input++;
-        if ( c != '_' ) {
-            *buf++ = c;
-        } else {
-            unsigned char d;
-
-            c = *input++;
-            d = (c >= 'A' ? c - 'A' + 10 : c - '0' ) << 4;
-            c = *input++;
-            d |= (c >= 'A' ? c - 'A' + 10 : c-'0');
-            *buf++ = d;
-        }
-    }
-    *buf = 0;
-
-    ptr = strrchr(start, '_');
     if ( ptr != NULL ) {
-        *ptr = 0;
-        ptr++;
-        *lineno = atoi(ptr);
+        snprintf(buf,buflen,"%.*s", (int)(ptr - input), input);
+        *lineno = atoi(ptr+1);
     }
 }
 
@@ -50,23 +31,8 @@ static int symbol_compare(const void *p1, const void *p2)
     return s2->address - s1->address;
 }
 
-static void add_cline(const char *filename, int lineno, const char *address)
-{                  
-    cfile *cf;
-    cline *cl;
-    HASH_FIND_STR(cfiles, filename, cf);
-    if ( cf == NULL ) {
-        cf = calloc(1,sizeof(*cf));
-        cf->file = strdup(filename);
-        cf->lines = NULL;
-        HASH_ADD_KEYPTR(hh, cfiles, cf->file, strlen(cf->file), cf);
-    }
 
-    cl = calloc(1,sizeof(*cl));
-    cl->line = lineno;
-    cl->address = strtol(address + 1, NULL, 16);
-    HASH_ADD_INT(cf->lines, line, cl);
-}
+
 
 void read_symbol_file(char *filename)
 {
@@ -94,7 +60,9 @@ void read_symbol_file(char *filename)
                 free(argv);
                 continue;
             }
-            if ( strncmp(argv[0], "__CLINE__",9) ) {
+            if ( strncmp(argv[0],"__CDBINFO__",11) == 0 ) {
+                debug_add_info_encoded(argv[0] + 11);
+            } else if ( strncmp(argv[0], "__C_LINE_",9) && strncmp(argv[0], "__ASM_LINE_",11) ) {
                 symbol *sym = calloc(1,sizeof(*sym));
 
                 sym->name = strdup(argv[0]);
@@ -113,12 +81,19 @@ void read_symbol_file(char *filename)
                     LL_APPEND(symbols[sym->address], sym);
                 }
                 HASH_ADD_KEYPTR(hh, symbols_byname, sym->name, strlen(sym->name), sym);
-            } else {
-                /* It's a cline symbol */
+            } else if ( argc > 9 ) {
+                /* It's a cline/asmline symbol */
                 char   filename[FILENAME_MAX+1];
                 int    lineno;
-                demangle_filename(argv[0], filename, sizeof(filename),&lineno);
-                add_cline(filename, lineno, argv[2]);
+                char  *ptr;
+
+                demangle_filename(argv[9], filename, sizeof(filename),&lineno);
+                debug_add_cline(filename, lineno, argv[2]);
+
+                if ( ( ptr = strchr(filename,':')) != NULL ) {
+                    *ptr = 0;
+                    debug_add_cline(filename, lineno, argv[2]);
+                }
 
             }
             free(argv);
@@ -146,27 +121,43 @@ int symbol_resolve(char *name)
     }
 
     /* Check for it being a file */
-    if ( ( ptr = strchr(name, ':') ) != NULL ) {
-        char filename[FILENAME_MAX+1];
-        int  line;
-        cfile *cf;
+    return debug_resolve_source(name);
+}
+    
 
-        snprintf(filename, sizeof(filename),"%.*s", (int)(ptr - name), name);
-        line = atoi(ptr+1);
 
-        HASH_FIND_STR(cfiles, filename, cf);
+// Find a symbol lower than where we were
+int symbol_find_lower(int addr, symboltype preferred_type, char *buf, size_t buflen)
+{
+    symbol *sym;
+    int     original_address = addr;
 
-        if ( cf != NULL ) {
-            cline *cl;
+    buf[0] = 0;
 
-            HASH_FIND_INT(cf->lines, &line, cl);
+    if ( addr < 0 ) {
+        return -1;
+    }
+    
+    while ( (sym = symbols[addr % 65536]) == NULL && addr > 0 ) {
+        addr--;
+    }
 
-            if ( cl != NULL ) {
-                return cl->address;
-            }
+    while ( sym != NULL ) {
+        if ( preferred_type == SYM_ANY ) {
+            break;
         }
+        if ( preferred_type == sym->symtype ) {
+            break;
+        }
+        sym = sym->next;
+    }
+
+    if ( sym != NULL ) {
+        snprintf(buf,buflen,"%s+%d", sym->name, original_address-addr);
+        return 0;
     }
     return -1;
+
 }
 
 const char *find_symbol(int addr, symboltype preferred_type)

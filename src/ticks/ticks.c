@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -572,8 +573,10 @@ unsigned char
 char   cmd_arguments[255];
 int    cmd_arguments_len = 0;
 
+int    ioport = -1;
 int    c_cpu = CPU_Z80;
 int    rom_size = 0;
+int    rc2014_mode = 0;
 
 static const uint8_t mirror_table[] = {
     0x0, 0x8, 0x4, 0xC,  /*  0-3  */
@@ -582,14 +585,29 @@ static const uint8_t mirror_table[] = {
     0x3, 0xB, 0x7, 0xF   /* 12-15 */
 };
 
+void exit_log(int code, char *fmt, ...)
+{
+    va_list  ap;
+
+    va_start(ap, fmt);
+    if ( fmt != NULL ) {
+       fprintf(stderr, "ticks: ");
+       vfprintf(stderr, fmt, ap);
+    }
+
+    va_end(ap);
+    exit(code);
+}
+
 long tapcycles(void){
   mues= 1;
   wavpos!=0x20000 && (ear^= 64);
-  if( wavpos>0x1f000 )
-    fseek( ft, wavpos-0x20000, SEEK_CUR ),
-    wavlen-= wavpos,
-    wavpos= 0,
-    (void)fread(tapbuf, 1, 0x20000, ft);
+  if( wavpos>0x1f000 ) {
+    fseek( ft, wavpos-0x20000, SEEK_CUR );
+    wavlen-= wavpos;
+    wavpos= 0;
+    if (0x20000 != fread(tapbuf, 1, 0x20000, ft)) { fclose(ft); exit_log(1, "Routine tapcycles could not read required data\n"); }
+  }
   while( (tapbuf[++wavpos]^ear<<1)&0x80 && wavpos<0x20000 )
     mues+= 81;  // correct value must be 79.365, adjusted to simulate contention in Alkatraz
   if( wavlen<=wavpos )
@@ -599,10 +617,20 @@ long tapcycles(void){
 }
 
 int in(int port){
+  int val;
+
+  if ( (val = hook_console_in(port)) != -1 ) return val;
+  if ( (val = apu_in(port)) != -1 ) return val;
+  if ( (val = acia_in(port)) != -1 ) return val;
+  
   return port&1 ? 255 : ear;
 }
 
 void out(int port, int value){
+  if ( hook_console_out(port,value) == 0 ) return;
+  if ( apu_out(port,value) == 0 ) return;
+  if ( acia_out(port, value) == 0 ) return;
+  
   memory_handle_paging(port, value);
 }
 
@@ -644,6 +672,7 @@ int main (int argc, char **argv){
 
   hook_init();
   debugger_init();
+  apu_reset();
 
   tapbuf= (unsigned char *) malloc (0x20000);
   if( argc==1 )
@@ -673,6 +702,7 @@ int main (int argc, char **argv){
     printf("  -x <file>      Symbol file to read\n"),
     printf("  -ide0 <file>   Set file to be ide device 0\n"),
     printf("  -ide1 <file>   Set file to be ide device 1\n"),
+    printf("  -iochar X      Set port X to be character input/output\n"),
     printf("  -output <file> dumps the RAM content to a 64K file\n"),
     printf("  -rom X         write-protect memory, X in hexadecimal is first RAM address\n\n"),
     printf("  Default values for -pc, -start and -end are 0000 if ommited. When the program "),
@@ -705,6 +735,8 @@ int main (int argc, char **argv){
             hook_io_set_ide_device(0, argv[1]);
           } else if ( strcmp(&argv[0][1], "ide1") == 0 ) {
             hook_io_set_ide_device(1, argv[1]);
+          } else if ( strcmp(&argv[0][1], "iochar") == 0 ) {
+            ioport = strtol(argv[1], NULL, 10);
           } else {
             intr= strtol(argv[1], NULL, 10);
           }
@@ -759,7 +791,7 @@ int main (int argc, char **argv){
             if( !ft )
               printf("\nTape file not found: %s\n", argv[1]),
               exit(-1);
-            (void)fread(tapbuf, 1, 0x20000, ft);
+            if (0x20000 != fread(tapbuf, 1, 0x20000, ft)) { fclose(ft); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
             memcpy(&wavlen, tapbuf+4, 4);
             wavlen+= 8;
             if( *(int*) tapbuf != 0x46464952 )
@@ -800,8 +832,13 @@ int main (int argc, char **argv){
             argc--;
             argv++;
           }
-          put_memory(65280,cmd_arguments_len % 256);
-          memcpy(get_memory_addr(65281), cmd_arguments, cmd_arguments_len % 256);
+          if ( pc == 256 ) {
+            put_memory(0x80,cmd_arguments_len % 256);
+            memcpy(get_memory_addr(0x81), cmd_arguments, cmd_arguments_len % 256);
+          } else {
+            put_memory(65280,cmd_arguments_len % 256);
+            memcpy(get_memory_addr(65281), cmd_arguments, cmd_arguments_len % 256);
+          }
           break;
         default:
           printf("\nWrong Argument: %s\n", argv[0]);
@@ -820,95 +857,108 @@ int main (int argc, char **argv){
       if( size>65536 && size!=65574 )
         printf("\nIncorrect length: %d\n", size),
         exit(-1);
-      else if( !strcasecmp(strchr(argv[1], '.'), ".com" ) ){
+      else if( strstr(argv[1], "rc2014") != NULL ) {
+        *get_memory_addr(0x08) = 0xED;
+        *get_memory_addr(0x09) = 0xFE;
+        *get_memory_addr(0x0a) = 0xC9;
+        *get_memory_addr(0x10) = 0xED;
+        *get_memory_addr(0x11) = 0xFE;
+        *get_memory_addr(0x12) = 0xC9;
+        *get_memory_addr(0x18) = 0xED;
+        *get_memory_addr(0x19) = 0xFE;
+        *get_memory_addr(0x1a) = 0xC9;
+        rc2014_mode = 1;
+        if (1 != fread(get_memory_addr(pc), size, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+      } else if( !strcasecmp(strchr(argv[1], '.'), ".com" ) ){
         *get_memory_addr(5) = 0xED;
         *get_memory_addr(6) = 0xFE;
         *get_memory_addr(7) = 0xC9;
-       pc = 256;
+        pc = 256;
         // CP/M emulator
-        (void)fread(get_memory_addr(256), 1, size, fh);
-
+        if (1 != fread(get_memory_addr(256), size, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
       } else if( !strcasecmp(strchr(argv[1], '.'), ".sna" ) && size==49179 ){
         FILE *fk= fopen("48.rom", "rb");
         if( !fk )
           printf("\nZX Spectrum ROM file not found: 48.rom\n"),
           exit(-1);
-        (void)fread(get_memory_addr(0), 1, 16384, fk);
+        if (16384 != fread(get_memory_addr(0), 1, 16384, fk)) { fclose(fk); exit_log(1, "Could not read required data from <48.rom>\n"); }
         fclose(fk);
-        (void)fread(&i, 1, 1, fh);
-        (void)fread(&l_, 1, 1, fh);
-        (void)fread(&h_, 1, 1, fh);
-        (void)fread(&e_, 1, 1, fh);
-        (void)fread(&d_, 1, 1, fh);
-        (void)fread(&c_, 1, 1, fh);
-        (void)fread(&b_, 1, 1, fh);
-        (void)fread(&w, 1, 1, fh);
+        if (1 != fread(&i,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&l_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&h_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&e_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&d_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&c_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&b_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&w,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
         setf(w);
         ff_= ff;
         fr_= fr;
         fa_= fa;
         fb_= fb;
-        (void)fread(&a_, 1, 1, fh);
-        (void)fread(&l, 1, 1, fh);
-        (void)fread(&h, 1, 1, fh);
-        (void)fread(&e, 1, 1, fh);
-        (void)fread(&d, 1, 1, fh);
-        (void)fread(&c, 1, 1, fh);
-        (void)fread(&b, 1, 1, fh);
-        (void)fread(&yl, 1, 1, fh);
-        (void)fread(&yh, 1, 1, fh);
-        (void)fread(&xl, 1, 1, fh);
-        (void)fread(&xh, 1, 1, fh);
-        (void)fread(&iff, 1, 1, fh);
+        if (1 != fread(&a_,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&l,   1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&h,   1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&e,   1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&d,   1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&c,   1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&b,   1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&yl,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&yh,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&xl,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&xh,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&iff, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
         iff>>= 2;
-        (void)fread(&r, 1, 1, fh);
+        if (1 != fread(&r, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
         r7= r;
-        (void)fread(&w, 1, 1, fh);
+        if (1 != fread(&w,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
         setf(w);
-        (void)fread(&a, 1, 1, fh);
-        (void)fread(&sp, 2, 1, fh);
-        (void)fread(&im, 1, 1, fh);
-        (void)fread(&w, 1, 1, fh);
-        (void)fread(get_memory_addr(0x4000), 1, 0xc000, fh);
+        if (1 != fread(&a,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&sp, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&im, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&w,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (0xc000 != fread(get_memory_addr(0x4000), 1, 0xc000, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
         RET(0);
       }
-      else if( size==65574 )
-        (void)fread(get_memory_addr(0), 1, 65536, fh),
-        (void)fread(&w, 1, 1, fh),
-        u= w,
-        (void)fread(&a, 1, 1, fh),
-        (void)fread(&c, 1, 1, fh),
-        (void)fread(&b, 1, 1, fh),
-        (void)fread(&l, 1, 1, fh),
-        (void)fread(&h, 1, 1, fh),
-        (void)fread(&pc, 2, 1, fh),
-        (void)fread(&sp, 2, 1, fh),
-        (void)fread(&i, 1, 1, fh),
-        (void)fread(&r, 1, 1, fh),
-        r7= r,
-        (void)fread(&e, 1, 1, fh),
-        (void)fread(&d, 1, 1, fh),
-        (void)fread(&c_, 1, 1, fh),
-        (void)fread(&b_, 1, 1, fh),
-        (void)fread(&e_, 1, 1, fh),
-        (void)fread(&d_, 1, 1, fh),
-        (void)fread(&l_, 1, 1, fh),
-        (void)fread(&h_, 1, 1, fh),
-        (void)fread(&w, 1, 1, fh),
-        setf(w),
-        ff_= ff,
-        fr_= fr,
-        fa_= fa,
-        fb_= fb,
-        setf(u),
-        (void)fread(&a_, 1, 1, fh),
-        (void)fread(&yl, 1, 1, fh),
-        (void)fread(&yh, 1, 1, fh),
-        (void)fread(&xl, 1, 1, fh),
-        (void)fread(&xh, 1, 1, fh),
-        (void)fread(&iff, 1, 1, fh),
-        (void)fread(&im, 1, 1, fh),
-        (void)fread(&mp, 2, 1, fh);
+      else if( size==65574 ) {
+        if (65536 != fread(get_memory_addr(0), 1, 65536, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+
+        if (1 != fread(&w, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        u= w;
+        if (1 != fread(&a,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&c,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&b,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&l,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&h,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&pc, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&sp, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&i,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&r,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        r7= r;
+        if (1 != fread(&e,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&d,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&c_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&b_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&e_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&d_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&l_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&h_, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&w,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        setf(w);
+        ff_= ff;
+        fr_= fr;
+        fa_= fa;
+        fb_= fb;
+        setf(u);
+        if (1 != fread(&a_,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&yl,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&yh,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&xl,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&xh,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&iff, 1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&im,  1, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+        if (1 != fread(&mp,  2, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+      }
       else {
         int l;
         for ( l = 0; l < size; l++ ) {
@@ -920,15 +970,16 @@ int main (int argc, char **argv){
     --argc;
   }
   if( size==65574 ){
-    (void)fread(&wavpos, 4, 1, fh);
+    if (1 != fread(&wavpos, 4, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
     ear= wavpos<<6 | 191;
     wavpos>>= 1;
-    if( wavpos && ft )
-      fseek(ft, wavlen-wavpos, SEEK_SET),
-      wavlen= wavpos,
-      wavpos= 0,
-      (void)fread(tapbuf, 1, 0x20000, ft);
-    (void)fread(&sttap, 4, 1, fh);
+    if( wavpos && ft ) {
+      fseek(ft, wavlen-wavpos, SEEK_SET);
+      wavlen= wavpos;
+      wavpos= 0;
+      if (0x20000 != fread(tapbuf, 1, 0x20000, ft)) { fclose(ft); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
+    }
+    if (1 != fread(&sttap, 4, 1, fh)) { fclose(fh); exit_log(1, "Could not read required data from <%s>\n", argv[1]); }
     tap= sttap;
   }
   else

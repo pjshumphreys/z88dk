@@ -16,6 +16,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <math.h>
+
+typedef long double zdouble;
 
 #include "define.h"
 
@@ -46,19 +49,120 @@
 
 extern void     callfunction(SYMBOL *ptr, Type *func_ptr_call_type);
 
+
+/* cdbfile.c */
+extern void     debug_write_module();
+extern void     debug_write_symbol(SYMBOL *sym);
+extern void     debug_write_type(Type *type);
+
 #include "codegen.h"
+
+extern void gen_comment(const char *comment);
+extern void gen_file_header(void);
+extern void gen_file_footer(void);
+extern void gen_switch_section(const char *section_name);
+
+
+extern void gen_store_to_tos(Kind typeobj);
+extern void gen_conv_uint2char(void);
+extern void gen_conv_sint2char(void);
+extern void gen_conv_uint2long(void);
+extern void gen_conv_sint2long(void);
+extern void gen_conv_carry2int(void);
+extern void gen_call(int nargs_count, const char *name, SYMBOL *sym);
+
+extern void gen_intrinsic_in(SYMBOL *sym);
+extern void gen_intrinsic_out(SYMBOL *sym);
+
+extern void gen_swap_float(Kind float_type);
+extern void gen_pop_frame(void);
+extern void gen_push_frame(void);
+extern void gen_push_float(Kind typeToPush);
+extern void gen_push_primary(LVALUE *lval);
+
+extern void gen_critical_enter(void);
+extern void gen_critical_leave(void);
+extern void gen_shortcall(Type *functype, int rst, int value);
+extern void gen_bankedcall(SYMBOL *sym);
+extern void gen_hl_call(Type *functype, int module, int address);
+extern void gen_emit_line(int);
+
+extern void gen_load_indirect(LVALUE *lval);
+extern void gen_load_static(SYMBOL *sym);
+extern void gen_store_static(SYMBOL *sym);
+extern void gen_load_constant_as_float(double value, Kind to, unsigned char isunsigned);
+extern void gen_leave_function(Kind save,char type, int incritical);
+extern int gen_push_function_argument(Kind expr, Type *type, int push_sdccchar);
+extern void gen_switch_preamble(Kind kind);
+extern void gen_switch_case(Kind kind, int64_t value, int label);
+extern void gen_switch_postamble(Kind kind);
+extern void gen_jp_label(int label);
+extern void gen_save_pointer(LVALUE *lval);
+
+extern int gen_restore_frame_after_call(int offset, Kind save, int saveaf, int usebc);
+
+extern void opjump(char *, int);
+extern void testjump(LVALUE *,int label);
+extern void zerojump(void (*oper)(LVALUE *,int), int label, LVALUE *lval);
+
+extern void zadd_const(LVALUE *lval, int64_t value);
+extern void zadd(LVALUE *);
+extern void zsub(LVALUE *);
+extern void mult(LVALUE *);
+extern void mult_const(LVALUE *lval, int64_t value);
+extern int mult_dconst(LVALUE *lval, double value, int isrhs);
+extern void zdiv(LVALUE *);
+extern void zdiv_const(LVALUE *lval, int64_t value);
+extern int zdiv_dconst(LVALUE *lval, double value, int isrhs);
+extern void zmod(LVALUE *);
+extern void zmod_const(LVALUE *lval, int64_t value);
+extern void zor(LVALUE *);
+extern void zor_const(LVALUE *lval, int64_t value);
+extern void zxor(LVALUE *);
+extern void zxor_const(LVALUE *lval, int64_t value);
+extern void zand(LVALUE *);
+extern void zand_const(LVALUE *lval, int64_t value);
+extern void asr(LVALUE *);
+extern void asr_const(LVALUE *lval, int64_t value);
+extern void asl(LVALUE *);
+extern void asl_const(LVALUE *lval, int64_t value);
+extern void lneg(LVALUE *);
+extern void neg(LVALUE *);
+extern void com(LVALUE *);
+extern void inc(LVALUE *);
+extern void dec(LVALUE *);
+extern void zeq(LVALUE *);
+extern void zeq_const(LVALUE *m, int64_t value);
+extern void eq0(LVALUE *,int label);
+extern void zne(LVALUE *);
+extern void zne_const(LVALUE *, int64_t value);
+extern void zlt(LVALUE *);
+extern void zlt_const(LVALUE *, int64_t value);
+extern void zle(LVALUE *);
+extern void zle_const(LVALUE *, int64_t value);
+extern void zgt(LVALUE *);
+extern void zgt_const(LVALUE *, int64_t value);
+extern void zge(LVALUE *);
+extern void zge_const(LVALUE *, int64_t value);
+extern void dummy(LVALUE *);
+
+
 extern void copy_to_stack(char *label, int stack_offset,  int size);
 extern void copy_to_extern(const char *src, const char *dest, int size);
-extern void push_char_sdcc_style(void);
+extern void gen_builtin_strcpy(); 
+extern void gen_builtin_strchr(int32_t c); 
+extern void gen_builtin_memset(int32_t c, int32_t s);
+extern void gen_builtin_memcpy(int32_t src, int32_t n);
+
+extern void zconvert_to_long(unsigned char tounsigned, Kind from, unsigned char fromunsigned);
+extern void zconvert_to_llong(unsigned char tounsigned, Kind from, unsigned char fromunsigned);
+
 
 /* const.c */
 extern int        constant(LVALUE *lval);
-extern int        fnumber(LVALUE *val);
-extern int        number(LVALUE *lval);
-extern int        hex(char c);
+
 extern void       address(SYMBOL *ptr);
-extern int        pstr(LVALUE *lval);
-extern int        tstr(int32_t *val);
+
 extern int        storeq(int length, unsigned char *queue,int32_t *val);
 extern int        qstr(double *val);
 extern void       stowlit(int value, int size);
@@ -66,13 +170,11 @@ extern unsigned char litchar(void);
 extern void       size_of(LVALUE *lval);
 extern void       offset_of(LVALUE *lval);
 extern void       load_double_into_fa(LVALUE *lval);
-extern void       write_double_queue(void);
-extern void       decrement_double_ref(LVALUE *lval);
-extern void       increment_double_ref(LVALUE *lval);
-extern void       decrement_double_ref_direct(double value);
-extern void       indicate_double_written(int litlab);
+extern void       load_llong_into_acc(zdouble val);
+extern void       write_constant_queue(void);
+extern void       indicate_constant_written(int litlab);
 
-extern void       dofloat(double raw, unsigned char fa[]);
+extern void       dofloat(enum maths_mode mode, double raw, unsigned char fa[]);
 #include "data.h"
 
 /* declinit.c */
@@ -114,7 +216,7 @@ extern void       errorfmt(const char *fmt, int fatal, ...);
 extern void       parse_warning_option(const char *value);
 
 /* expr.c */
-extern Kind       expression(int *con, double *val, Type **type);
+extern Kind       expression(int *con, zdouble *val, Type **type);
 extern int        heir1(LVALUE *lval);
 extern int        heira(LVALUE *lval);
 
@@ -168,7 +270,7 @@ extern int      c_offset;
 extern int      skim(char *opstr, void (*testfuncz)(LVALUE* lval, int label), void (*testfuncq)(int label), int dropval, int endval, int (*heir)(LVALUE* lval), LVALUE *lval);
 extern void     dropout(int k, void (*testfuncz)(LVALUE* lval, int label), void (*testfuncq)(int label), int exit1, LVALUE *lval);
 extern int      plnge1(int (*heir)(LVALUE* lval), LVALUE *lval);
-extern void     plnge2a(int (*heir)(LVALUE* lval), LVALUE *lval, LVALUE *lval2, void (*oper)(LVALUE *lval), void (*doper)(LVALUE *lval), void (*constoper)(LVALUE *lval, int32_t constval), int (*dconstoper)(LVALUE *lval, double const_val, int isrhs));
+extern void     plnge2a(int (*heir)(LVALUE* lval), LVALUE *lval, LVALUE *lval2, void (*oper)(LVALUE *lval), void (*doper)(LVALUE *lval), void (*constoper)(LVALUE *lval, int64_t constval), int (*dconstoper)(LVALUE *lval, double const_val, int isrhs));
 extern void     plnge2b(int (*heir)(LVALUE* lval), LVALUE *lval, LVALUE *lval2, void (*oper)(LVALUE *lval));
 extern void     load_constant(LVALUE *lval);
 
@@ -192,12 +294,12 @@ extern void     pop_buffer_fp(void);
 
 /* primary.c */
 extern int      primary(LVALUE *lval);
-extern double   calc(Kind left_kind, double left, void (*oper)(LVALUE *), double right, int is16bit);
-extern double   calcun(Kind left_kind, double left, void (*oper)(LVALUE *),double right);
+extern zdouble  calc(Kind left_kind, zdouble left, void (*oper)(LVALUE *), Kind right_kind, zdouble right, int is16bit);
+extern zdouble  calcun(Kind left_kind, zdouble left, void (*oper)(LVALUE *), Kind right_kind, zdouble right);
 extern int      intcheck(LVALUE *lval, LVALUE *lval2);
-extern void     force(Kind t1, Kind t2, char sign1, char sign2, int lconst);
-extern int      widen(LVALUE *lval, LVALUE *lval2);
-extern void     widenlong(LVALUE *lval, LVALUE *lval2);
+extern void     force(Kind to, Kind from, char to_sign, char from_sign, int lconst);
+extern int      widen_if_float(LVALUE *lval, LVALUE *lval2, int operator_is_commutative);
+extern void     widenintegers(LVALUE *lval, LVALUE *lval2);
 extern int      dbltest(LVALUE *lval, LVALUE *lval2);
 extern void     result(LVALUE *lval, LVALUE *lval2);
 extern void     prestep(LVALUE *lval, int n, void (*step)(LVALUE *lval));
@@ -218,7 +320,7 @@ extern void     check_assign_range(Type *type, double const_value);
 
 /* stmt.c */
 extern int      statement(void);
-extern void     leave(Kind save,char type, int incritical);
+extern void     gen_leave_function(Kind save,char type, int incritical);
 extern void     doasm(void);
 extern void     dopragma(void);
 extern void     doasmfunc(char wantbr);
@@ -229,7 +331,7 @@ extern SYMBOL  *findstc(char *sname);
 extern SYMBOL  *findglb(const char *sname);
 extern SYMBOL  *findloc(char *sname);
 extern SYMBOL  *addglb(char *sname, Type *type, enum ident_type id, Kind kind, int value, enum storage_type storage);
-extern SYMBOL  *addloc(char *sname, enum ident_type id, Kind kind);
+extern SYMBOL  *addloc(char *sname, Type *type, enum ident_type id, Kind kind, int where);
 
 /* while.c */
 extern void     addwhile(WHILE_TAB *ptr);

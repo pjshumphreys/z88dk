@@ -13,6 +13,7 @@
 #include "hist.h"
 #include "init.h"
 #include "model.h"
+#include "modlink.h"        /* Prevent warning: implicit declaration of function ‘library_file_append’ */
 #include "options.h"
 #include "srcfile.h"
 #include "str.h"
@@ -164,8 +165,8 @@ void parse_argv( int argc, char *argv[] )
 
     init_module();
 
-    if ( argc == 1 )
-        exit_copyright();					/* exit if no arguments */
+	if ( argc == 1 )
+		exit_copyright();					/* exit if no arguments */
 
 	if (!get_num_errors())
 		process_env_options();				/* process options from Z80ASM environment variable */
@@ -177,7 +178,7 @@ void parse_argv( int argc, char *argv[] )
 		error_no_src_file();				/* no source file */
 
 	if ( ! get_num_errors() )
-        process_files( arg, argc, argv );	/* process each source file */
+		process_files( arg, argc, argv );	/* process each source file */
 
 	make_output_dir();						/* create output directory if needed */
 	include_z80asm_lib();					/* search for z80asm-*.lib, append to library path */
@@ -250,6 +251,18 @@ static void process_opt( int *parg, int argc, char *argv[] )
 	}
 	else if (strcmp(argv[II], "-mti83plus") == 0 || strcmp(argv[II], "-m=ti83plus") == 0) {
 		option_cpu_ti83plus();
+		return;
+	}
+	else if (strncmp(argv[II], "-l", 2) == 0 && argv[II][2] != '\0') {
+		library_file_append(&argv[II][2]);
+		return;
+	}
+	else if (strcmp(argv[II], "-l") == 0) {
+		opts.list = true;
+		return;
+	}
+	else if (strcmp(argv[II], "-reloc-info") == 0) {
+		opts.reloc_info = true;
 		return;
 	}
 	else {
@@ -601,7 +614,7 @@ static void show_option( enum OptType type, bool *pflag,
 
     if ( *help_arg )
     {
-        Str_append_sprintf( msg, "=%s", help_arg );
+        Str_append_sprintf( msg, "%s", help_arg );
     }
 
     if ( Str_len(msg) > ALIGN_HELP )
@@ -660,7 +673,10 @@ int number_arg(const char *arg)
 	int radix;
 	char suffix = '\0';
 	
-	if (p[0] == '$') {
+	if (p[0] == '\0') {		// empty
+		return -1;
+	}
+	else if (p[0] == '$') {
 		p++;
 		radix = 16;
 	}
@@ -712,22 +728,31 @@ static void option_define(const char *symbol )
     int i;
 
     /* check syntax - BUG_0045 */
-    if ( (! isalpha( symbol[0] )) && (symbol[0] != '_') )
-    {
-        error_illegal_ident();
-        return;
-    }
+	if (!isalpha(symbol[0]) && symbol[0] != '_') {
+		error_illegal_ident();
+		return;
+	}
 
-    for ( i = 1; symbol[i]; i++ )
-    {
-        if ( ! isalnum( symbol[i] ) && symbol[i] != '_' )
-        {
-            error_illegal_ident();
-            return;
-        }
-    }
+	for (i = 1; symbol[i] != 0 && symbol[i] != '='; i++) {
+		if (!isalnum(symbol[i]) && symbol[i] != '_') {
+			error_illegal_ident();
+			return;
+		}
+	}
 
-    define_static_def_sym( symbol, 1 );
+	if (symbol[i] != '=') {		// -Dvar
+		define_static_def_sym(symbol, 1);
+	}
+	else {						// -Dvar=nn
+		char* variable = xstrdup(symbol);
+		variable[i] = '\0';		// truncate after variable name
+		int value = number_arg(symbol + i + 1);
+		if (value < 0)
+			error_invalid_define_option(symbol);
+		else
+			define_static_def_sym(variable, value);
+		xfree(variable);
+	}
 }
 
 static void option_make_lib(const char *library )
@@ -906,10 +931,11 @@ const char *get_map_filename(const char *filename)
 	return path_prepend_output_dir(path_replace_ext(filename, FILEEXT_MAP));
 }
 
+// argument is binary file, already has the output_dir prepended
 const char *get_reloc_filename(const char *filename)
 {
 	init_module();
-	return path_prepend_output_dir(path_replace_ext(filename, FILEEXT_RELOC));
+	return path_replace_ext(filename, FILEEXT_RELOC);
 }
 
 const char *get_asm_filename(const char *filename)
@@ -963,7 +989,7 @@ void checkrun_appmake(void)
 			const char *bin_filename = get_bin_filename(get_first_module(NULL)->filename);
 			const char *out_filename = path_replace_ext(bin_filename, opts.appmake_ext);
 
-			Str_sprintf(cmd, "appmake %s -b \"%s\" -o \"%s\" --org %d",
+			Str_sprintf(cmd, "z88dk-appmake %s -b \"%s\" -o \"%s\" --org %d",
 				opts.appmake_opts,
 				bin_filename,
 				out_filename,

@@ -8,166 +8,135 @@
 ; Exit:	  bc = argc
 ;         hl = argv
 
-	ld	de,0	;NULL pointer at end, just in case
-	push	de
+    ld      de,0	;NULL pointer at end of array, just in case
+    push    de
 ; Try to find the end of the arguments
 argv_loop_1:
-	ld	a,(hl)
-	cp	' '
-IF __CPU_8080__
-	jp	nz,argv_loop_2
-ELSE
-	jr	nz,argv_loop_2
-ENDIF
-	ld	(hl),0
-	dec	hl
-	dec	c
-IF __CPU_8080__
-	jp	nz,argv_loop_1
-ELSE
-	jr	nz,argv_loop_1
-ENDIF
+    ld      a,(hl)          ;Strip off trailing spaces
+    cp      ' '
+    jr      nz,argv_loop_2
+    ld      (hl),0
+    dec     hl
+    dec     c
+    jr      nz,argv_loop_1
 ; We've located the end of the last argument, try to find the start
 argv_loop_2:
-	ld	a,(hl)
-	cp	' '
-IF __CPU_8080__
-	jp	nz,argv_loop_3
-ELSE
-	jr	nz,argv_loop_3
-ENDIF
-	;ld	(hl),0
-	inc	hl
-
+    ld      a,(hl)
+    cp      ' '
+    jr      nz,argv_loop_3
+    inc     hl              ; We're now on the first character of the argument
+    inc     c
 IF CRT_ENABLE_STDIO
-IF !DEFINED_noredir
-IF !DEFINED_nostreams
-	EXTERN freopen
-	xor	a
-	add	b
-IF __CPU_8080__
-	jp	nz,no_redir_stdout
-ELSE
-	jr	nz,no_redir_stdout
-ENDIF
-	ld	a,(hl)
-	cp	'>'
-IF __CPU_8080__
-	jp	nz,no_redir_stdout
-ELSE
-	jr	nz,no_redir_stdout
-ENDIF
-	push	hl
-	inc	hl
-	cp	(hl)
-	dec	hl
-	ld	de,redir_fopen_flag	; "a" or "w"
-IF __CPU_8080__
-	jp	nz,noappendb
-ELSE
-	jr	nz,noappendb
-ENDIF
-	ld	a,'a'
-	ld	(de),a
-	inc	hl
+  IF !DEFINED_noredir
+    IF !DEFINED_nostreams
+        EXTERN freopen
+        xor     a
+        add     b
+        jr      nz,no_redir_stdout
+        ld      a,(hl)
+        cp      '>'
+        jr      nz,no_redir_stdout
+        push    hl
+        inc     hl
+        cp      (hl)
+        dec     hl
+        ld      de,redir_fopen_flag	; "a" or "w"
+        jr      nz,noappendb
+        ld      a,'a'
+        ld      (de),a
+        inc     hl
 noappendb:
-	inc	hl
-		
-	push	bc
-	push	hl					; file name ptr
-	push	de
-	ld	de,__sgoioblk+10		; file struct for stdout
-	push	de
-	call	freopen
-	pop	de
-	pop	de
-	pop	hl
-	pop	bc
-
-	pop	hl
-		
-	dec	hl
-IF __CPU_8080__
-	jp	argv_zloop
-ELSE
-	jr	argv_zloop
-ENDIF
+        inc     hl
+        	
+        push    bc
+        push    hl					; file name ptr
+        push    de
+        ld      de,__sgoioblk+10		; file struct for stdout
+        push    de
+        call    freopen
+        pop     de
+        pop     de
+        pop     hl
+        pop     bc
+        pop     hl
+        dec     hl
+        jr      argv_zloop
 no_redir_stdout:
-
-	ld	a,(hl)
-	cp	'<'
-IF __CPU_8080__
-	jp	nz,no_redir_stdin
-ELSE
-	jr	nz,no_redir_stdin
-ENDIF
-	push	hl
-	inc	hl
-	ld	de,redir_fopen_flagr
-	
-	push	bc
-	push	hl					; file name ptr
-	push	de
-	ld	de,__sgoioblk		; file struct for stdin
-	push	de
-	call	freopen
-	pop	de
-	pop	de
-	pop	hl
-	pop	bc
-
-	pop	hl
-		
-	dec	hl
-IF __CPU_8080__
-	jp	argv_zloop
-ELSE
-	jr	argv_zloop
-ENDIF
+        ld      a,(hl)
+        cp      '<'
+        jr      nz,no_redir_stdin
+        push    hl
+        inc     hl
+        ld      de,redir_fopen_flagr
+        push    bc
+        push    hl					; file name ptr
+        push    de
+        ld      de,__sgoioblk		; file struct for stdin
+        push    de
+        call    freopen
+        pop     de
+        pop     de
+        pop     hl
+        pop     bc
+        pop     hl
+        dec	    hl
+        jr      argv_zloop
 no_redir_stdin:
+    ENDIF
+  ENDIF
 ENDIF
-ENDIF
-ENDIF
-
-	push	hl
-	inc	b
-	dec	hl
-
+    push    hl
+    inc     b
+empty_arg:
+    dec     hl
+    dec     c
 ; skip extra blanks
 argv_zloop:
-	ld	(hl),0
-	dec	c
-IF __CPU_8080__
-	jp	z,argv_done
-ELSE
-	jr	z,argv_done
-ENDIF
-	dec	hl
-	ld	a,(hl)
-	cp	' '
-IF __CPU_8080__
-	jp	z,argv_zloop
-ELSE
-	jr	z,argv_zloop
-ENDIF
-	inc c
-	inc hl
-
+    ld      (hl),0      ;Terminate the previous argument
+    dec     hl          ;Last character of previous argument
+    dec     c
+    jr      z,argv_done 
+    ld      a,(hl)
+    cp      ' '
+    jr      z,argv_zloop ;Skip over multiple spaces
+    jr      argv_loop_2  ;And do the next argument
+    
 argv_loop_3:
-	dec	hl
-	dec	c
-IF __CPU_8080__
-	jp	nz,argv_loop_2
-ELSE
-	jr	nz,argv_loop_2
-ENDIF
+    dec     hl
+    dec     c
+    jr      nz,argv_loop_2
 
 argv_done:
-	ld	hl,end	;name of program (NULL)
-	push	hl
-	inc	b
-	ld	hl,0
-	add	hl,sp	;address of argv
-	ld	c,b
-	ld	b,0
+    ; We may still have an argument left (if it was at the start of the buffer)
+
+argv_push_final_arg:
+    ld      a,(hl)              ;Strip leading spaces
+    cp      ' '
+    jr      nz,argv_push_final_arg2
+    inc     hl
+    jr      argv_push_final_arg
+argv_push_final_arg2:
+    pop     de                  ;Is it the same as the last argument we pushed?
+    push    de
+    ld      a,h
+    sub     d
+    jr      nz,argv_push_final_arg3
+    ld      a,l
+    sub     e
+    jr      z,argv_done_2
+argv_push_final_arg3:
+    ld      a,(hl)
+    and     a
+    jr      z,argv_done_2
+    push    hl
+    inc     b
+    
+argv_done_2:
+    ld      hl,end	;name of program (NULL)
+    push    hl
+    inc     b
+    ld      hl,0
+    add     hl,sp	;address of argv
+    ld      c,b
+    ld      b,0
 

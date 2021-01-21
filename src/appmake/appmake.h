@@ -83,6 +83,8 @@ extern option_t  cpc_options;
 extern int       cpm2_exec(char *target);
 extern option_t  cpm2_options;
 
+extern int       dai_exec(char *target);
+extern option_t  dai_options;
 
 extern int       enterprise_exec(char *target);
 extern option_t  enterprise_options;
@@ -114,6 +116,9 @@ extern int       extract_exec(char *target);
 extern option_t  extract_options;
 extern char      extract_longhelp[];
 
+extern int       lviv_exec(char *target);
+extern option_t  lviv_options;
+
 extern int       lynx_exec(char *target);
 extern option_t  lynx_options;
 
@@ -131,6 +136,9 @@ extern option_t  mc_options;
 
 extern int       msx_exec(char *target);
 extern option_t  msx_options;
+
+extern int       msxrom_exec(char *target);
+extern option_t  msxrom_options;
 
 extern int       mtx_exec(char *target);
 extern option_t  mtx_options;
@@ -152,6 +160,9 @@ extern option_t  nec_options;
 
 extern int       noop_exec(char *target);
 extern option_t  noop_options;
+
+extern int       ondra_exec(char *target);
+extern option_t  ondra_options;
 
 extern int       pasopia7_exec(char *target);
 extern option_t  pasopia7_options;
@@ -299,6 +310,10 @@ struct {
       "CPM disk image creation",
       NULL,
       cpm2_exec,     &cpm2_options },
+    { "bin2dai",  "dai",   "(C) 2020 z88dk",
+      "DAI cassete image creater",
+      NULL,
+      dai_exec,     &dai_options },
     { "bin2ep",   "enterprise",      "(C) 2011 Stefano Bodrato",
       "Adds a type 5 header to make a .app file",
       NULL,
@@ -347,6 +362,10 @@ struct {
       "Convert the Laser 350/500/700 .vz file to .cas, optionally to WAV",
       NULL,
       laser500_exec,    &laser500_options },
+    { "bin2lvt",  "lviv",          "(C) 2020 z88dk",
+      "Generates an LVT file for the Livi PK-01",
+      NULL,
+      lviv_exec,     &lviv_options },
     { "lynxtap",  "lynx",      "(C) 2014 Stefano Bodrato",
       "Generates a tape file for the Camputers Lynx, opt. WAV",
       NULL,
@@ -371,6 +390,10 @@ struct {
       "Adds a file header to enable the program to be loaded using 'bload \"file.bin\",r",
       NULL,
       msx_exec,     &msx_options },
+    { "bin2msr",  "msxrom",   "(C) 2020 z88dk",
+      "Generates an MSX rom file.",
+      NULL,
+      msxrom_exec,  &msxrom_options },
     { "bin2mtx",  "mtx",      "(C) 2011 Stefano Bodrato",
       "Memotech MTX file format packaging, optional WAV format",
       NULL,
@@ -407,6 +430,10 @@ struct {
       "A noop operator, does nothing",
       NULL,
       noop_exec,    &noop_options },
+    { "bin2otp",   "ondra",       "(C) 2020 z88dk",
+      "Convert binary file to Ondra .tap file",
+      NULL,
+      ondra_exec,    &ondra_options },
     { "mc2cas",   "p2000",      "(C) 2014 Stefano Bodrato",
       "Philips P2000 MicroCassette to CAS format conversion",
       NULL,
@@ -495,6 +522,10 @@ struct {
       "Creates a CMD file for the TRS 80",
       NULL,
       trs80_exec,   &trs80_options },
+    { "bin2cas",   "tvc",      "(C) 2019 Sandor Vass",
+      "Generate TVC .cas file from the linked binary",
+      NULL,
+      tvc_exec,   &tvc_options },
     { "bin2fdd",  "vector06c", "(C) 2020 z88dk",
       "Create a bootable vector06c disk",
       NULL,
@@ -553,10 +584,6 @@ struct {
       "Creates a zxvgs application file",
       NULL,
       zxvgs_exec,   &zxvgs_options},
-    { "bin2cas",   "tvc",      "(C) 2019 Sandor Vass",
-      "Generate TVC .cas file from the linked binary",
-      NULL,
-      tvc_exec,   &tvc_options },
     { NULL, NULL, NULL, NULL, NULL, NULL }
 };
 #endif
@@ -567,7 +594,6 @@ struct {
 #define LINEMAX         80
 
 
-#define myexit(buf, code) exit_log(code, buf)
 extern void         exit_log(int code, char *fmt, ...) __NORETURN;
 extern long         parameter_search(const char *filen,const  char *ext,const char *target);
 extern FILE        *fopen_bin(const char *fname,const  char *crtfile);

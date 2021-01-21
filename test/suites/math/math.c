@@ -1,15 +1,41 @@
 
 
-
 #include "test.h"
 #include <stdio.h>
-#include <math.h>
 #include <stdlib.h>
+
+#include <math.h>
+
+#ifdef MATH16
+    #define FABS(x) fabsf16(x)
+    #define SQRT(x) sqrtf16(x);
+    #define POW(x,y) powf16(x,y)
+    typedef _Float16 FLOAT;
+#else
+    #define FABS(x) fabs(x)
+    #define SQRT(x) sqrt(x);
+    #define POW(x,y) pow(x,y)
+    typedef double FLOAT;
+#endif
+
+#ifdef MATH16
+   #define EPSILON (0.005)
+   #define TINY_POSITIVE TINY_POS_F16
+#elif MATH32
+   #define EPSILON (0.000001)
+   #define TINY_POSITIVE TINY_POS_F32
+#elif MATHDAI32
+   #define EPSILON (0.000001)
+   #define TINY_POSITIVE TINY_POS_AM9511
+#else
+   #define EPSILON (0.000000001)
+   #define TINY_POSITIVE FLT_MIN
+#endif
 
 void test_comparison()
 {
-     double a = 10.0;
-     double b = -2.0;
+     FLOAT a = 10.0;
+     FLOAT b = -2.0;
 
      Assert( a > b, "a > b");
      Assert( a >= b, "a >= b");
@@ -22,7 +48,7 @@ void test_comparison()
 
 void test_integer_constant_operations()
 {
-     double a = 2;
+     FLOAT a = 2;
 
      a += 2;
      Assert ( a == 4, "addition: a == 4");
@@ -36,7 +62,7 @@ void test_integer_constant_operations()
 
 void test_integer_operations()
 {
-     double a = 2;
+     FLOAT a = 2;
      int    b = 2;
 
      a += b;
@@ -51,7 +77,7 @@ void test_integer_operations()
 
 void test_integer_constant_longform_lhs()
 {
-     double a = 2;
+     FLOAT a = 2;
 
      a = 2 + a;
      Assert ( a == 4, "addition: a == 4");
@@ -65,7 +91,7 @@ void test_integer_constant_longform_lhs()
 
 void test_integer_constant_longform()
 {
-     double a = 2;
+     FLOAT a = 2;
 
      a = a + 2;
      Assert ( a == 4, "addition: a == 4");
@@ -79,7 +105,7 @@ void test_integer_constant_longform()
 
 void test_post_incdecrement()
 {
-     double a = 2;
+     FLOAT a = 2;
 
      a++;
      Assert( a == 3, "++: a == 3");
@@ -87,21 +113,31 @@ void test_post_incdecrement()
      Assert( a == 2, "--: a == 2");
 }
 
-static int approx_equal(double a, double b)
+static int approx_equal(FLOAT a, FLOAT b, FLOAT epsilon)
 {
-#ifdef MATH32
-   if ( fabs(b-a) < 0.0001) {
-#else
-   if ( fabs(b-a) < 0.00000001 ) {
-#endif
-       return 1;
-   }
-   return 0;
+
+    float absa = FABS( a );
+    float absb = FABS( b );
+    float diff = FABS( a-b );
+
+    if (a == b) {
+        /* shortcut, handles infinities */
+        return 1;
+    } else {
+        if ( a == 0 || b == 0 || ((absa + absb) < TINY_POSITIVE )) {
+            /* a or b is zero or both are extremely close to it */
+            /* relative error is less meaningful here           */
+            return diff < (epsilon * TINY_POSITIVE);
+        } else {
+            /* use relative error */
+            return diff/(absa + absb) < epsilon;
+        }
+    }
 }
 
 void test_pre_incdecrement()
 {
-     double a = 2;
+     FLOAT a = 2;
 
      ++a;
      Assert( a == 3, "++: a == 3");
@@ -109,12 +145,33 @@ void test_pre_incdecrement()
      Assert( a == 2, "--: a == 2");
 }
 
-static void run_sqrt(double x, double e)
+void test_approx_equal()
+{
+#ifndef MATHDAI32
+    Assert( approx_equal(1.0,2.0,EPSILON) == 0, " 1 != 2");
+    Assert( approx_equal(1.0,1.0,EPSILON) == 1, " 1 == 1");
+    //                   0.00000001
+    Assert( approx_equal(1.23456789,1.23456789,EPSILON) == 1, " 1.23456789 == 1.23456789");
+#ifdef MATH16
+    //                   0.005
+    Assert( approx_equal(1.24,1.22,EPSILON) == 0, " 1.24 != 1.22");
+#elif MATH32
+    //                   0.000001
+    Assert( approx_equal(1.23456,1.23455,EPSILON) == 0, " 1.23456 != 1.23455");
+#else
+    //                   0.00000001
+    Assert( approx_equal(1.23456789,1.23456788,EPSILON) == 0, " 1.23456789 != 1.23456788");
+#endif
+#endif
+}
+
+static void run_sqrt(FLOAT x, FLOAT e)
 {
     static char   buf[100];
-    double r = sqrt(x);
-    snprintf(buf,sizeof(buf),"Sqrt(%f) should be %.14f but was %.14f",x,e,r);
-    Assert( approx_equal(e,r), buf);
+
+    FLOAT r = SQRT(x);
+    snprintf(buf,sizeof(buf),"Sqrt(%f) should be %.14f but was %.14f",(float)x,(float)e,(float)r);
+    Assert( approx_equal(e,r,EPSILON), buf);
 }
 
 void test_sqrt()
@@ -122,39 +179,25 @@ void test_sqrt()
     run_sqrt(4.0, 2.0);
     run_sqrt(9.0, 3.0);
     run_sqrt(1.0, 1.0);
-    run_sqrt(1000000, 1000.0);
+    run_sqrt(6400, 80.0);
     run_sqrt(0.5, 0.70710678);
-
 }
 
-static void run_pow(double x, double y, double e)
+static void run_pow(FLOAT x, FLOAT y, FLOAT e)
 {
     static char   buf[100];
-    double r = pow(x,y);
-    snprintf(buf,sizeof(buf),"pow(%f,%f) should be %.14f but was %.14f",x,y,e,r);
-    Assert( approx_equal(e,r), buf);
+
+    FLOAT r = POW(x,y);
+    snprintf(buf,sizeof(buf),"pow(%f,%f) should be %.14f but was %.14f",(float)x,(float)y,(float)e,(float)r);
+    Assert( approx_equal(e,r,EPSILON), buf);
 }
 
 void test_pow()
 {
     run_pow(2.0, 2.0, 4.0);
     run_pow(0.5, 2.0, 0.25);
+    run_pow(4.0, 3.0, 64.0);
     run_pow(2, 0.5, 1.41421356);
-}
-
-void test_approx_equal()
-{
-    Assert( approx_equal(1.0,2.0) == 0, " 1 != 2");
-    Assert( approx_equal(1.0,1.0) == 1, " 1 == 1");
-    //                   0.00000001
-    Assert( approx_equal(1.23456789,1.23456789) == 1, " 1.23456789 == 1.23456789");
-#ifdef MATH32
-    //                   0.0001
-    Assert( approx_equal(1.2345,1.2344) == 0, " 1.2345 != 1.2344");
-#else
-    //                   0.00000001
-    Assert( approx_equal(1.23456789,1.23456788) == 0, " 1.23456789 != 1.23456788");
-#endif
 }
 
 int suite_math()
