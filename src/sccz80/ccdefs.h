@@ -265,6 +265,7 @@ extern int      c_cpu;
 extern int      c_fp_mantissa_bytes;
 extern int      c_fp_exponent_bias;
 extern int      c_old_diagnostic_fmt;
+extern int      c_offset;
 
 
 #include "misc.h"
