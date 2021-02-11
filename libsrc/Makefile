@@ -33,6 +33,8 @@ TOCREATE += $(call check_target,aussie,aussie.lib $(CPMLIBS))
 TOCREATE += $(call check_target,bee,bee_clib.lib microbee.lib $(CPMLIBS))
 TOCREATE += $(call check_target,bic,bic.lib $(CPMLIBS))
 TOCREATE += $(call check_target,bit90,bit90.lib coleco_clib.lib)
+TOCREATE += $(call check_target,bondwell,bondwell.lib $(CPMLIBS))
+TOCREATE += $(call check_target,bondwell2,bondwell2.lib $(CPMLIBS))
 TOCREATE += $(call check_target,c128,c128ansi_clib.lib gfx128.lib gfx128udg.lib gfx128hr.lib gfx128hr480.lib)
 TOCREATE += $(call check_target,c7420,c7420_clib.lib)
 TOCREATE += $(call check_target,coleco,coleco_clib.lib)
@@ -146,7 +148,7 @@ define buildgeneric
 	$(MAKE) -C time
 	$(MAKE) -C font
 	$(MAKE) -C input
-	$(MAKE) -C stdlib TARGET=$(1)
+	$(MAKE) -C stdlib 
 	$(MAKE) -C gfx TARGET=$(1) FLAVOUR=$(if $(2),$(2),narrow)
 	$(MAKE) -C psg TARGET=$(1)
 endef
@@ -440,6 +442,7 @@ zx80_clib.lib:
 	$(MAKE) zx81deps
 	$(call buildgeneric,zx80)
 	$(MAKE) -C games TARGET=zx80
+	$(MAKE) -C target/zx80 
 	TARGET=zx80 TYPE=z80 $(LIBLINKER) -DSTANDARDESCAPECHARS -DFORzx80 -x$(OUTPUT_DIRECTORY)/zx80_clib @$(LISTFILE_DIRECTORY)/zx80.lst
 	$(MAKE) zx81deps
 
@@ -642,6 +645,21 @@ attache.lib:
 	$(MAKE) -C psg TARGET=cpm SUBTYPE=attache
 	$(MAKE) -C gfx TARGET=cpm FLAVOUR=wide SUBTYPE=attache
 	TARGET=attache TYPE=z80 $(LIBLINKER) -DFORattache -x$(OUTPUT_DIRECTORY)/attache @$(LISTFILE_DIRECTORY)/target/attache/attache.lst
+
+bondwell.lib:
+	@echo ''
+	@echo '--- Building Bondwell 12/14 Library ---'
+	@echo ''
+	$(MAKE) -C games TARGET=cpm SUBTYPE=bondwell
+	$(MAKE) -C gfx TARGET=cpm FLAVOUR="gencon narrow" SUBTYPE=bondwell
+	TARGET=bondwell TYPE=z80 $(LIBLINKER) -DFORbondwell -x$(OUTPUT_DIRECTORY)/bondwell @$(LISTFILE_DIRECTORY)/target/bondwell/bw.lst
+
+bondwell2.lib:
+	@echo ''
+	@echo '--- Building Bondwell 2 Library ---'
+	@echo ''
+	$(MAKE) -C gfx TARGET=cpm FLAVOUR=wide SUBTYPE=bondwell2
+	TARGET=bondwell2 TYPE=z80 $(LIBLINKER) -DFORbondwell2 -x$(OUTPUT_DIRECTORY)/bondwell2 @$(LISTFILE_DIRECTORY)/target/bondwell2/bw2.lst
 
 gfxosborne1.lib:
 	@echo ''
