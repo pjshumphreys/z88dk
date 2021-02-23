@@ -94,6 +94,7 @@ TOCREATE += $(call check_target,pv1000,pv1000_clib.lib)
 TOCREATE += $(call check_target,pv2000,pv2000_clib.lib)
 TOCREATE += $(call check_target,px4,px4.lib $(CPMLIBS))
 TOCREATE += $(call check_target,px8,px8.lib $(CPMLIBS))
+TOCREATE += $(call check_target,radio86,radio86_clib.lib)
 TOCREATE += $(call check_target,rcmx000,rcmx000_clib.lib)
 TOCREATE += $(call check_target,rc700,rc700.lib $(CPMLIBS))
 TOCREATE += $(call check_target,rex,rex_clib.lib)
@@ -117,7 +118,7 @@ TOCREATE += $(call check_target,ti83p,ti83p_clib.lib)
 TOCREATE += $(call check_target,ti85,ti85_clib.lib)
 TOCREATE += $(call check_target,ti86,ti86_clib.lib)
 TOCREATE += $(call check_target,tiki100,tiki100.lib $(CPMLIBS))
-TOCREATE += $(call check_target,trs80, trs80_clib.lib trsdos.lib gfxtrs80.lib gfxeg2000.lib)
+TOCREATE += $(call check_target,trs80, trs80_clib.lib trsdos.lib gfxtrs80.lib gfxeg2000.lib grafyx4_3.lib grafyx4.lib gfxhrg1.lib)
 TOCREATE += $(call check_target,ts2068, ts2068_clib.lib m2068.lib)
 TOCREATE += $(call check_target,tvc, tvc_clib.lib)
 TOCREATE += $(call check_target,vector06c,vector06c_clib.lib)
@@ -650,6 +651,7 @@ bondwell.lib:
 	@echo ''
 	@echo '--- Building Bondwell 12/14 Library ---'
 	@echo ''
+	@$(RM) -f video/mc6845/*.o
 	$(MAKE) -C games TARGET=cpm SUBTYPE=bondwell
 	$(MAKE) -C gfx TARGET=cpm FLAVOUR="gencon narrow" SUBTYPE=bondwell
 	TARGET=bondwell TYPE=z80 $(LIBLINKER) -DFORbondwell -x$(OUTPUT_DIRECTORY)/bondwell @$(LISTFILE_DIRECTORY)/target/bondwell/bw.lst
@@ -658,6 +660,7 @@ bondwell2.lib:
 	@echo ''
 	@echo '--- Building Bondwell 2 Library ---'
 	@echo ''
+	@$(RM) -f video/msm6255/*.o
 	$(MAKE) -C gfx TARGET=cpm FLAVOUR=wide SUBTYPE=bondwell2
 	TARGET=bondwell2 TYPE=z80 $(LIBLINKER) -DFORbondwell2 -x$(OUTPUT_DIRECTORY)/bondwell2 @$(LISTFILE_DIRECTORY)/target/bondwell2/bw2.lst
 
@@ -1565,6 +1568,29 @@ gfxeg2000.lib:
 	$(MAKE) -C gfx TARGET=trs80 FLAVOUR="narrow" SUBTYPE=eg2000
 	TARGET=eg2000 TYPE=z80 $(LIBLINKER) -DFOReg2000 -x$(OUTPUT_DIRECTORY)/gfxeg2000 @$(LISTFILE_DIRECTORY)/target/trs80/gfxeg2000.lst
 
+gfxhrg1.lib:
+	@echo ''
+	@echo '--- Building HRG1 TRS80 Model I Libraries ---'
+	@echo ''
+	$(MAKE) -C gfx TARGET=trs80 FLAVOUR="wide" SUBTYPE=hrg1
+	TARGET=hrg1 TYPE=z80 $(LIBLINKER) -DFORhrg1 -x$(OUTPUT_DIRECTORY)/gfxhrg1 @$(LISTFILE_DIRECTORY)/target/trs80/gfxhrg1.lst
+
+grafyx4_3.lib:
+	@echo ''
+	@echo '--- Building GrafyxSolution (M4 on Model III) Libraries ---'
+	@echo ''
+	$(RM) target/trs80/grafyx/*.o
+	$(MAKE) -C gfx TARGET=trs80 FLAVOUR="wide" SUBTYPE=grafyx3
+	TARGET=grafyx3 TYPE=z80 $(LIBLINKER) -DFORgrafyx3 -x$(OUTPUT_DIRECTORY)/grafyx4_3 @$(LISTFILE_DIRECTORY)/target/trs80/grafyx.lst
+
+grafyx4.lib:
+	@echo ''
+	@echo '--- Building GrafyxSolution (M4 on Model 4) Libraries ---'
+	@echo ''
+	$(RM) target/trs80/grafyx/*.o
+	$(MAKE) -C gfx TARGET=trs80 FLAVOUR="wide" SUBTYPE=grafyx4
+	TARGET=grafyx4 TYPE=z80 $(LIBLINKER) -DFORgrafyx4 -x$(OUTPUT_DIRECTORY)/grafyx4 @$(LISTFILE_DIRECTORY)/target/trs80/grafyx.lst
+
 trsdos.lib:
 	$(MAKE) -C target/trs80/fcntl
 
@@ -1719,6 +1745,14 @@ krokha_clib.lib:
 	$(call buildgeneric,krokha,"gencon portable")
 	$(MAKE) -C games TARGET=krokha
 	TARGET=krokha TYPE=8080 $(LIBLINKER) -DSTANDARDESCAPECHARS -m8080 -DFORkrokha -x$(OUTPUT_DIRECTORY)/krokha_clib @$(LISTFILE_DIRECTORY)/krokha.lst
+
+radio86_clib.lib:
+	@echo ''
+	@echo '--- Building Radio86 Library ---'
+	@echo ''
+	$(call buildgeneric,radio86,"gencon portable")
+	TARGET=radio86 TYPE=8080 $(LIBLINKER) -DSTANDARDESCAPECHARS -m8080 -DFORradio86 -x$(OUTPUT_DIRECTORY)/radio86_clib @$(LISTFILE_DIRECTORY)/radio86.lst
+
 
 gfxvti.lib:
 	@echo ''
@@ -1899,4 +1933,3 @@ install-clean: classic-clean new-install-clean
 
 install:
 	cp $(OUTPUT_DIRECTORY)/*.lib ../lib/clibs
-
