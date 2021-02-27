@@ -20,7 +20,7 @@
                 EXTERN    mdvbuffer
 
                 EXTERN     if1_checkblock
-                EXTERN    if1_sect_read
+                ;EXTERN    if1_sect_read
 
                 EXTERN     if1_setname
 
@@ -41,11 +41,9 @@ _if1_load_record:
                 ld      a,(ix+6)
                 ld      hl,-1
                 and     a               ; drive no. = 0 ?
-                jp	z,if_load_record_exit               ; yes, return -1
-                dec     a
-                cp      8               ; drive no. >8 ?
-                jp	nc,if_load_record_exit              ; yes, return -1
-                inc     a
+                jp      z,if_load_record_exit               ; yes, return -1
+                cp      9               ; drive no. >8 ?				
+                jp      nc,if_load_record_exit              ; yes, return -1
 
                 ld      (driveno),a     ; drive number selected (d_str1)
 
@@ -70,8 +68,10 @@ _if1_load_record:
                 call    if1_rommap
 
 
-                ld      hl,(driveno)    ; drive number selected
-                ld      (5CD6h),hl      ; d_str1
+                ;ld      hl,(driveno)    ; drive number selected
+                ;ld      (5CD6h),hl      ; d_str1
+                ld      a,(driveno)    ; drive number selected
+                ld      (5CD6h),a      ; d_str1
 
                 ld      a,'M'
                 ld      (5CD9h),A       ; l_str1 (device type = "M")
@@ -112,8 +112,8 @@ copyname:
                 ld      (ix+0Dh),a      ; CHREC
                 res     0,(ix+18h)      ; set CHFLAG to "read" mode
  
-                xor     a
-                ld      (if1_sect_read),a       ; flag for "sector read"
+                ;xor     a
+                ;ld      (if1_sect_read),a       ; flag for "sector read"
 
                 ld      hl,04FBh
                 ld      (5CC9h),hl      ; SECTOR
@@ -166,9 +166,9 @@ nxt_sect:
                 call    next_sector     ; Decrease sector counter and check if we reached zero
                 jr      nz,do_read
 
-                ld      a,(if1_sect_read)       ; flag for "sector read"
-                or      a
-                jr      z,sect_notfound
+                ;ld      a,(if1_sect_read)       ; flag for "sector read"
+                ;or      a
+                ;jr      z,sect_notfound
 
 
 sectread:

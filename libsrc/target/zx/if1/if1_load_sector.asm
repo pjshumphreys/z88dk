@@ -9,7 +9,7 @@
 ;       2/3 sector number
 ;       0/1 buffer
 ;
-;       $Id: if1_load_sector.asm,v 1.3 2016-07-01 22:08:20 dom Exp $
+;       $Id: if1_load_sector.asm $
 ;
 
 		SECTION   code_clib
@@ -20,7 +20,7 @@
                 EXTERN    mdvbuffer
 
                 EXTERN     if1_checkblock
-                EXTERN    if1_sect_read
+                ;EXTERN    if1_sect_read
 
                 EXTERN    MAKE_M
                 EXTERN    CLOSE_M
@@ -39,11 +39,9 @@ _if1_load_sector:
                 ld      a,(ix+4)
                 ld      hl,-1
                 and     a               ; drive no. = 0 ?
-                jp	z,if_load_sector_exit               ; yes, return -1
-                dec     a
-                cp      8               ; drive no. >8 ?
-                jr	nc,if_load_sector_exit              ; yes, return -1
-                inc     a
+                jp      z,if_load_sector_exit               ; yes, return -1
+                cp      9               ; drive no. >8 ?
+                jr      nc,if_load_sector_exit              ; yes, return -1
 
                 ld      (driveno),a     ; drive number selected (d_str1)
 
@@ -58,9 +56,10 @@ _if1_load_sector:
                 call    if1_rommap
 
 
-
-                ld      hl,(driveno)    ; drive number selected
-                ld      (5CD6h),hl      ; d_str1
+                ;ld      hl,(driveno)    ; drive number selected
+                ;ld      (5CD6h),hl      ; d_str1
+                ld      a,(driveno)    ; drive number selected
+                ld      (5CD6h),a      ; d_str1
 
                 ld      a,'M'
                 ld      (5CD9h),A       ; l_str1 (device type = "M")
@@ -78,8 +77,8 @@ _if1_load_sector:
                 ld      (ix+0Dh),a      ; CHREC
                 res     0,(ix+18h)      ; set CHFLAG to "read" mode
  
-                xor     a
-                ld      (if1_sect_read),a       ; flag for "sector read"
+                ;xor     a
+                ;ld      (if1_sect_read),a       ; flag for "sector read"
 
                 ld      hl,04FBh
                 ld      (5CC9h),hl      ; SECTOR
@@ -127,9 +126,9 @@ nextrec:
         ;       ret
         ;noverify:
 
-                ld      a,(if1_sect_read)       ; flag for "sector read"
-                or      a
-                jr      z,sect_notfound
+                ;ld      a,(if1_sect_read)       ; flag for "sector read"
+                ;or      a
+                ;jr      z,sect_notfound
 
 sectread:
                 call    CLOSE_M         ; close file

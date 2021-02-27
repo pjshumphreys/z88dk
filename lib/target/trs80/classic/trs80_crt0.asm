@@ -129,7 +129,7 @@ cmdline:
 	jr	nz,nocr
 	xor a
 	ld	(hl),a
-	jr  argv_done
+	jp  argv_done
 nocr:
 	dec	hl
 find_end:
@@ -227,10 +227,6 @@ end:		defb	0		; null file name (used in argv/argc parsing)
 
 	SECTION  rodata_clib
 IF CRT_ENABLE_STDIO = 1
-IF !DEFINED_noredir
-redir_fopen_flag:		defb	'w',0
-redir_fopen_flagr:		defb	'r',0
-ENDIF
 IF DEFINED_doscmd
 crt_do_fname:		defb	'*','D','O',0
 IF DEFINED_noredir
