@@ -16,7 +16,7 @@
  *      O_TRUNC = 512
  *
  * -----
- * $Id: open.c,v 1.2 2016-06-13 19:55:47 dom Exp $
+ * $Id: open.c $
  */
 
 #include <cpm.h>
@@ -38,7 +38,7 @@ int open(char *name, int flags, mode_t mode)
             fc->name[5] |= 0x80;    /* read only mode */
         uid = getuid();
         setuid(fc->uid);
-        if ( (flags & O_TRUNC) == O_TRUNC)
+        if (flags & O_TRUNC)
             remove(name);
 		
         if ( bdos(CPM_OPN,fc) == -1 ) {
@@ -61,10 +61,13 @@ int open(char *name, int flags, mode_t mode)
 	
 	/* we keep an extra byte in the FCB struct to support random access,
 	   but at the moment we use only a "TEXT/BINARY" discrimination flag */
+
 	fc->mode = mode & _IOTEXT;
 
     fd =  (fc - &_fcb[0]);
-    if (flags & O_APPEND)
+    if (flags & O_APPEND) {
+		fc->use=U_RDWR;
         lseek(fd,0L,SEEK_END);
+	}
     return fd;
 }

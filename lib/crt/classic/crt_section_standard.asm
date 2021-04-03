@@ -33,6 +33,8 @@
 		SECTION code_l_sccz80
 		SECTION code_compress_zx7
 		SECTION code_compress_zx0
+		SECTION code_compress_zx1
+		SECTION code_compress_zx2
 		SECTION code_compress_aplib
 		SECTION code_ctype
 		SECTION code_esxdos
@@ -99,12 +101,15 @@ ENDIF
 		SECTION rodata_font_fzx
 		SECTION rodata_font_4x8
 		SECTION rodata_font_8x8
+		SECTION rodata_font_ansi
 		SECTION ROMABLE_END
 IF !__crt_model
 		SECTION DATA
   IF !__crt_org_graphics
 		SECTION smc_clib
   ENDIF
+		SECTION smc_fp
+		SECTION smc_compress
 		SECTION smc_user
                 SECTION data_driver
 		SECTION data_clib
@@ -166,6 +171,7 @@ IF !__crt_org_graphics
 		SECTION smc_clib
 ENDIF
 		SECTION smc_fp
+		SECTION smc_compress
 		SECTION smc_user
                 SECTION data_driver
 		SECTION data_crt

@@ -19,8 +19,9 @@
                 EXTERN     if1_rommap
                 EXTERN    mdvbuffer
 
-                EXTERN     if1_checkblock
-                ;EXTERN    if1_sect_read
+                EXTERN    if1_checkblock
+                EXTERN    if1_sect_ready
+                EXTERN    mdv_seek_count
 
                 EXTERN    MAKE_M
                 EXTERN    CLOSE_M
@@ -77,21 +78,21 @@ _if1_load_sector:
                 ld      (ix+0Dh),a      ; CHREC
                 res     0,(ix+18h)      ; set CHFLAG to "read" mode
  
-                ;xor     a
-                ;ld      (if1_sect_read),a       ; flag for "sector read"
+                xor     a
+                ld      (if1_sect_ready),a       ; flag for "sector read"
 
-                ld      hl,04FBh
+                ;ld      hl,255*5		; set sector counter
+				ld      hl,(mdv_seek_count)		; set sector counter (retries slightly reduced)
                 ld      (5CC9h),hl      ; SECTOR
 
 
-
-; *** scelta routine ***
 
                 ld      a,(driveno)     ; drive number selected
                 call    MOTOR           ; select drive motor
 IF !OLDIF1MOTOR
                 jr      nz,error_exit
 ENDIF
+
 
 
 nxtsector:
@@ -126,9 +127,9 @@ nextrec:
         ;       ret
         ;noverify:
 
-                ;ld      a,(if1_sect_read)       ; flag for "sector read"
-                ;or      a
-                ;jr      z,sect_notfound
+                ld      a,(if1_sect_ready)       ; flag for "sector read"
+                or      a
+                jr      z,sect_notfound
 
 sectread:
                 call    CLOSE_M         ; close file
@@ -168,6 +169,7 @@ next_sector:
                 ld      a,l
                 or      h
                 ret
+
 
 		SECTION bss_clib
 ;; various flags

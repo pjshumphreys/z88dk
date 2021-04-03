@@ -1,11 +1,12 @@
 ;
 ;	Startup for Sony SMC-777
-;
-;	$Id: test_crt0.asm,v 1.12 2016-06-21 20:49:07 dom Exp $
 
 
 	module smc777_crt0
 
+
+        defc    crt0 = 1
+        INCLUDE "zcc_opt.def"
 
         EXTERN    _main           ;main() is always external to crt0 code
         EXTERN    asm_im1_handler
@@ -14,6 +15,9 @@
         PUBLIC    l_dcal          ;jp(hl)
 
 
+        IF !CLIB_FGETC_CONS_DELAY
+                defc CLIB_FGETC_CONS_DELAY = 150
+        ENDIF
 	defc	CONSOLE_COLUMNS = 80
 	defc	CONSOLE_ROWS = 25
 	defc    TAR__fputc_cons_generic = 1

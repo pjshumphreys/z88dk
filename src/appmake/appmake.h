@@ -134,6 +134,9 @@ extern option_t  mameql_options;
 extern int       mc_exec(char *target);
 extern option_t  mc_options;
 
+extern int       mgt_exec(char *target);
+extern option_t  mgt_options;
+
 extern int       msx_exec(char *target);
 extern option_t  msx_options;
 
@@ -392,6 +395,10 @@ struct {
       "Generates a CAS file for the CCE MC-1000, optional WAV file",
       NULL,
       mc_exec,   &mc_options },
+    { "bin2mgt",  "mgt",      "(C) 2021 z88dk",
+      "Creates an MGT disc",
+      NULL,
+      mgt_exec,     &mgt_options },
     { "bin2msx",  "msx",      "(C) 2001 Stefano Bodrato",
       "Adds a file header to enable the program to be loaded using 'bload \"file.bin\",r",
       NULL,
@@ -651,6 +658,9 @@ extern void         zx_pilot(int pilot_len, FILE *fpout);
 extern void         zx_rawbit(FILE *fpout, int period);
 extern void         zx_rawout (FILE *fpout, unsigned char b, char fast);
 
+extern long         get_file_size(FILE *fp);
+
+
 /*  record size for bin2hex and other text encoding formats */
 extern int          bin2hex(FILE *input, FILE *output, int address, uint32_t len, int recsize, int eofrec);
 extern int          hexdigit(char digit);
@@ -729,3 +739,27 @@ extern void mb_generate_output_binary_complete(char *binname, int ihex, int fill
 extern void mb_delete_source_binaries(struct banked_memory *memory);
 extern void mb_cleanup_memory(struct banked_memory *memory);
 extern void mb_cleanup_aligned(struct aligned_data *aligned);
+
+
+/* mgt.c */
+typedef enum {
+    MGT_ERASE = 0,
+    MGT_BASIC = 1,
+    MGT_NUMBER_ARRAY = 2,
+    MGT_STRING_ARRAY = 3,
+    MGT_CODE = 4,
+    MGT_SNAP48K = 5,
+    MGT_MICRODRIVE = 6,
+    MGT_SCREEN = 7,
+    MGT_SPECIAL = 8,
+    MGT_SNAP128K = 9,
+    MGT_OPENTYPE = 10,
+    MGT_EXECUTE = 11,
+    MGT_SAM_BASIC = 16,
+    MGT_SAM_NUMBER_ARRAY = 17,
+    MGT_SAM_STRING_ARRAY = 18,
+    MGT_SAM_CODE = 19,
+    MGT_SAM_SCREEN = 20,
+} mgt_filetype;
+extern disc_handle *mgt_create(void);
+extern void mgt_writefile(disc_handle *h, char mgt_filename[11], mgt_filetype filetype, int org, int isexec, unsigned char *data, size_t len);

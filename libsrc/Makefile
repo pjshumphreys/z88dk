@@ -86,6 +86,7 @@ TOCREATE += $(call check_target,pacman,pacman_clib.lib)
 TOCREATE += $(call check_target,pasopia7,pasopia7_clib.lib)
 TOCREATE += $(call check_target,pc6001,pc6001_clib.lib)
 TOCREATE += $(call check_target,pc88,pc88_clib.lib)
+TOCREATE += $(call check_target,pcw,pcw.lib $(CPMLIBS))
 TOCREATE += $(call check_target,pencil2,pencil2_clib.lib)
 TOCREATE += $(call check_target,pmd85,pmd85_clib.lib)
 TOCREATE += $(call check_target,pps,pps_clib.lib)
@@ -383,19 +384,9 @@ pc88_clib.lib:
 	@echo '--- Building PC8801 Library ---'
 	@echo ''
 	$(MAKE) -C psg TARGET=pc88
-	$(call buildgeneric,pc88,"wide narrow")
+	$(call buildgeneric,pc88,"wide")
 	$(MAKE) -C games TARGET=pc88
 	TARGET=pc88 TYPE=z80 $(LIBLINKER) -DFORpc88 -DSTANDARDESCAPECHARS -x$(OUTPUT_DIRECTORY)/pc88_clib @$(LISTFILE_DIRECTORY)/pc88.lst
-	@echo ''
-	@echo '--- Building PC8801 160x100 graphics Library ---'
-	@echo ''
-	$(MAKE) -C gfx TARGET=pc88 FLAVOUR="narrow"
-	TARGET=pc88 TYPE=z80 $(LIBLINKER) -DFORpc88 -x$(OUTPUT_DIRECTORY)/gfxpc88 @$(LISTFILE_DIRECTORY)/target/pc88/gfxpc88.lst
-	@echo ''
-	@echo '--- Building PC8801 640x200 Mono Graphics Library ---'
-	@echo ''
-	$(MAKE) -C gfx TARGET=pc88 SUBTYPE=pc88hr200 FLAVOUR="wide"
-	TARGET=pc88 TYPE=z80 $(LIBLINKER) -DFORpc88hr200 -x$(OUTPUT_DIRECTORY)/gfxpc88hr200 @$(LISTFILE_DIRECTORY)/target/pc88/gfxpc88hr200.lst
 
 # Native for sprinter - dom
 pps_clib.lib:
@@ -685,13 +676,18 @@ x1_cpm.lib:
 	$(MAKE) -C gfx TARGET=cpm FLAVOUR=wide SUBTYPE=x1
 	TARGET=x1 TYPE=z80 $(LIBLINKER) -DFORx1 -x$(OUTPUT_DIRECTORY)/x1_cpm @$(LISTFILE_DIRECTORY)/target/x1/x1.lst
 
-cpm_clib.lib: 
+cpm_clib.lib:
 	@echo ''
 	@echo '--- Building CP/M Library ---'
 	@echo ''
 	$(call buildgeneric,cpm)
 	$(MAKE) -C target/cpm
 	TARGET=cpm TYPE=z80 DEVICE=nodevice $(LIBLINKER) -DSTANDARDESCAPECHARS -x$(OUTPUT_DIRECTORY)/cpm_clib @$(LISTFILE_DIRECTORY)/cpm.lst
+	@echo ''
+	@echo '--- Building GSX based Z88DK GFX Library ---'
+	@echo ''
+	$(MAKE) -C gfx TARGET=cpm FLAVOUR=wide
+	TARGET=cpm TYPE=z80 $(LIBLINKER) -DFORcpm -x$(OUTPUT_DIRECTORY)/gfxgsx @$(LISTFILE_DIRECTORY)/target/cpm/gfxgsx.lst
 
 cpm8080_clib.lib:
 	@echo ''
@@ -854,9 +850,10 @@ sam_clib.lib:
 	@echo ''
 	@echo '--- Building Sam Coupe Library ---'
 	@echo ''
-	$(call buildgeneric,sam)
+	$(call buildgeneric,sam,wide)
 	$(MAKE) -C games TARGET=sam
 	$(MAKE) -C target/zx TARGET=sam
+	$(MAKE) -C target/zx-common TARGET=sam
 	TARGET=sam TYPE=z80 $(LIBLINKER) -DFORsam -DSTANDARDESCAPECHARS -x$(OUTPUT_DIRECTORY)/sam_clib @$(LISTFILE_DIRECTORY)/sam.lst
 
 # Spectravideo SVI library - Stefano
@@ -1307,7 +1304,9 @@ gl6000_clib.lib:
 	@echo '--- Building Genius Leader 6000 Library ---'
 	@echo ''
 	$(call buildgeneric,gl)
-	TARGET=gl TYPE=z80 $(LIBLINKER) -DSTANDARDESCAPECHARS -DFORgl6000 -x$(OUTPUT_DIRECTORY)/gl6000_clib @$(LISTFILE_DIRECTORY)/gl6000.lst
+	$(MAKE) -C gfx TARGET=gl SUBTYPE=gl6000 FLAVOUR=narrow
+	$(MAKE) -C games TARGET=gl SUBTYPE=gl6000 TARGET_CFLAGS=-clib=gl6000sl
+	TARGET=gl6000 TYPE=z80 $(LIBLINKER) -DSTANDARDESCAPECHARS -DFORgl6000 -x$(OUTPUT_DIRECTORY)/gl6000_clib @$(LISTFILE_DIRECTORY)/gl6000.lst
 
 
 
@@ -1368,6 +1367,14 @@ cpc_math.lib:
 	@echo '--- Building Amstrad CPC Maths Libraries ---'
 	@echo ''
 	$(MAKE) -C math/cpcmath 
+
+# Amstrad PCW libraries - Stefano
+pcw.lib:
+	@echo ''
+	@echo '--- Building Amstrad PCW Library ---'
+	@echo ''
+	$(MAKE) -C gfx TARGET=cpm FLAVOUR=wide SUBTYPE=pcw
+	TARGET=pcw TYPE=z80 $(LIBLINKER) -DFORpcw -x$(OUTPUT_DIRECTORY)/pcw @$(LISTFILE_DIRECTORY)/target/pcw/pcw.lst
 
 # Commodore 128 (Z80 mode) library - Stefano
 c128ansi_clib.lib: 

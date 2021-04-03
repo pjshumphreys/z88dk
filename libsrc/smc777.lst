@@ -5,10 +5,11 @@ target/smc777/stdio/conio_vars
 target/smc777/stdio/CRT_FONT
 target/smc777/stdio/copy_font
 target/smc777/stdio/conio_map_colour
+target/smc777/stdio/getk
+target/smc777/stdio/fgetc_cons
 target/smc777/graphics/clg
 target/smc777/graphics/getmaxx
 target/smc777/graphics/getmaxy
-target/smc777/graphics/swapgfxbk
 target/smc777/graphics/textpixl
 target/smc777/graphics/w_pixladdr
 target/smc777/graphics/w_plotpixl

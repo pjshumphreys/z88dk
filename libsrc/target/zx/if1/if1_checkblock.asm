@@ -8,6 +8,10 @@
 ;	 - check the loaded block for integrity
 ;	 - other various checks
 ;	 - when a checksum is reported wrong, it is automatically fixed
+;
+;	This function is also used internally by if1_load_sector() and if1_load_record() 
+;	to verify that a block is loaded and valid (if1_sect_ready is affected also when a block was not found) 
+
 ;	
 ;	$Id: if1_checkblock.asm $
 ;
@@ -18,12 +22,15 @@
 		EXTERN	if1_checksum
 		
 		EXTERN	mdvbuffer
-		;PUBLIC	if1_sect_read
+
+		PUBLIC	mdv_seek_count
+		PUBLIC	if1_sect_ready
 		;PUBLIC	if1_verifymode
 
 
 
 if1_checkblock:
+
 		push	ix
 		pop	hl
 		ld	de,43h		; RECFLAG
@@ -61,11 +68,11 @@ chksector:
 		inc	a
 		inc	a
 chk2:
-		;ld	hl,if1_sect_read		; flag for "sector read"
-		;cp	(hl)
-		;ret	c
-		;ret	z
-		;ld	(hl),a
+		ld	hl,if1_sect_ready		; flag for "sector read"
+		cp	(hl)
+		ret	c
+		ret	z
+		ld	(hl),a
 ;		ld	b,a
 		
 ;		ld	a,(if1_verifymode)
@@ -81,8 +88,12 @@ chk2:
 		ldir
 		ret
 
+		SECTION data_clib
+	; in the Interface 1 ROM it is usually set to 255*5
+	; we risk to reduce it roughly by 1 tape revolution
+mdv_seek_count:		defw	256*4
 
 		SECTION bss_clib
 status:		defb	0
-;if1_sect_read:	defb	0
+if1_sect_ready:	defb	0
 ;if1_verifymode:	defb	0
